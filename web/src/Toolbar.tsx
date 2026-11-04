@@ -1,7 +1,7 @@
 // The controls above the table.
 
 import { fields, severities } from "@cbm-logviewer/shared";
-import type { VisibilityState } from "@tanstack/react-table";
+import { type Columns, defaultColumns } from "./columns";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type Mode, type RangeId, type View, ranges } from "./filters";
 
@@ -23,8 +23,8 @@ interface Props {
   onDownload: (format: "json" | "csv") => void;
   utc: boolean;
   onUtc: (utc: boolean) => void;
-  columnVisibility: VisibilityState;
-  onColumnVisibility: (v: VisibilityState) => void;
+  columns: Columns;
+  onColumns: (columns: Columns) => void;
 }
 
 export function Toolbar(p: Props) {
@@ -180,28 +180,41 @@ export function Toolbar(p: Props) {
           )}
         </Menu>
         <Menu label="Columns">
-          {() =>
-            fields.map((f) => (
-              <label
-                key={f.name}
-                className="check"
-                role="menuitemcheckbox"
-                aria-checked={p.columnVisibility[f.name] !== false}
+          {() => (
+            <>
+              {fields.map((f) => (
+                <label
+                  key={f.name}
+                  className="check"
+                  role="menuitemcheckbox"
+                  aria-checked={p.columns.visible[f.name] === true}
+                >
+                  <input
+                    type="checkbox"
+                    checked={p.columns.visible[f.name] === true}
+                    onChange={(e) =>
+                      p.onColumns({
+                        ...p.columns,
+                        visible: {
+                          ...p.columns.visible,
+                          [f.name]: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  {f.label}
+                </label>
+              ))}
+              <button
+                type="button"
+                className="reset"
+                title="The columns, their order and widths as at first"
+                onClick={() => p.onColumns(defaultColumns)}
               >
-                <input
-                  type="checkbox"
-                  checked={p.columnVisibility[f.name] !== false}
-                  onChange={(e) =>
-                    p.onColumnVisibility({
-                      ...p.columnVisibility,
-                      [f.name]: e.target.checked,
-                    })
-                  }
-                />
-                {f.label}
-              </label>
-            ))
-          }
+                Reset columns
+              </button>
+            </>
+          )}
         </Menu>
       </div>
     </header>

@@ -1,37 +1,39 @@
 // Settings of the viewer that the browser keeps, if it can.
 
-import type { ColumnSizingState, VisibilityState } from "@tanstack/react-table";
 import { useEffect, useState } from "react";
+import { type Columns, defaultColumns, normalize } from "./columns";
 
 export interface Settings {
-  columnVisibility: VisibilityState;
-  columnSizing: ColumnSizingState;
+  columns: Columns;
   utc: boolean;
   limit: number;
 }
 
+const defaults: Settings = {
+  columns: defaultColumns,
+  utc: false,
+  limit: 10000,
+};
+
 const key = "cbm-logviewer.settings";
 
-function load(defaults: Settings): Settings {
+function load(): Settings {
   try {
     const stored = JSON.parse(
       localStorage.getItem(key) ?? "{}",
     ) as Partial<Settings>;
     return {
-      ...defaults,
-      ...stored,
-      columnVisibility: {
-        ...defaults.columnVisibility,
-        ...stored.columnVisibility,
-      },
+      utc: typeof stored.utc === "boolean" ? stored.utc : defaults.utc,
+      limit: typeof stored.limit === "number" ? stored.limit : defaults.limit,
+      columns: normalize(stored.columns),
     };
   } catch {
     return defaults;
   }
 }
 
-export function useSettings(defaults: Settings) {
-  const [settings, setSettings] = useState(() => load(defaults));
+export function useSettings() {
+  const [settings, setSettings] = useState(load);
   useEffect(() => {
     try {
       localStorage.setItem(key, JSON.stringify(settings));
@@ -39,7 +41,13 @@ export function useSettings(defaults: Settings) {
       // not kept, e.g. in a private window
     }
   }, [settings]);
-  const update = (change: Partial<Settings>) =>
-    setSettings((s) => ({ ...s, ...change }));
+  // a change, or a function of the current settings that returns it
+  const update = (
+    change: Partial<Settings> | ((s: Settings) => Partial<Settings>),
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      ...(typeof change === "function" ? change(s) : change),
+    }));
   return [settings, update] as const;
 }

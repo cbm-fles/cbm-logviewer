@@ -40,7 +40,9 @@ test("shows and hides columns", async ({ page }) => {
 
 test("shows new messages in live mode", async ({ page }) => {
   await page.getByRole("button", { name: "Live", exact: true }).click();
-  await expect(page.locator(".state")).toHaveText(/^Live · 0 messages/);
+  // first the newest messages there are
+  await expect(page.locator(".state")).toHaveText(/^Live · 42 messages/);
+  await expect(page.getByRole("cell", { name: "status 39" })).toBeInViewport();
   await write(
     message("arrived live", [17, "ERROR"], 0),
     message("debug live", [5, "DEBUG"], 0),
@@ -57,4 +59,72 @@ test("shows new messages in live mode", async ({ page }) => {
   await expect(page.getByText("while paused")).toHaveCount(0);
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByText("while paused")).toBeVisible();
+});
+
+test("applies filters in live mode to the messages shown", async ({ page }) => {
+  await page.getByRole("button", { name: "Live", exact: true }).click();
+  await expect(page.locator(".state")).toHaveText(/^Live · \d+ messages/);
+  await expect(
+    page.getByRole("cell", { name: "second warning" }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("cell", { name: "second warning" })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Exclude this value" }).click();
+  await expect(page.getByRole("cell", { name: "second warning" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("cell", { name: "first warning" })).toBeVisible();
+
+  // and to new ones
+  await write(
+    message("second warning", [13, "WARN"], 0),
+    message("third warning", [13, "WARN"], 0),
+  );
+  await expect(page.getByRole("cell", { name: "third warning" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "second warning" })).toHaveCount(
+    0,
+  );
+});
+
+test("resizes and moves columns", async ({ page }) => {
+  const header = (name: string) =>
+    page.getByRole("columnheader", { name, exact: true });
+  const box = async (name: string) => (await header(name).boundingBox())!;
+
+  // Message takes the remaining width, and can be made narrower
+  const before = await box("Message");
+  const resizer = page.getByRole("separator", { name: "Resize Message" });
+  const r = (await resizer.boundingBox())!;
+  await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(r.x - 200, r.y + r.height / 2, { steps: 5 });
+  await page.mouse.up();
+  expect((await box("Message")).width).toBeCloseTo(before.width - 200, -1);
+  await resizer.dblclick();
+  expect((await box("Message")).width).toBeCloseTo(before.width, -1);
+
+  // Host before Time
+  await header("Host")
+    .locator(".th-label")
+    .dragTo(header("Time"), {
+      targetPosition: { x: 5, y: 10 },
+    });
+  const names = await page
+    .getByRole("columnheader")
+    .evaluateAll((hs) => hs.map((h) => h.getAttribute("aria-label")));
+  expect(names.slice(0, 3)).toEqual(["Host", "Time", "Severity"]);
+  await page.reload();
+  await expect(page.getByRole("columnheader").first()).toHaveAttribute(
+    "aria-label",
+    "Host",
+  );
+
+  await page.getByRole("button", { name: "Columns" }).click();
+  await page.getByRole("button", { name: "Reset columns" }).click();
+  await expect(page.getByRole("columnheader").first()).toHaveAttribute(
+    "aria-label",
+    "Time",
+  );
 });

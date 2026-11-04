@@ -31,6 +31,13 @@ describe("mergeNewest", () => {
     ]);
   });
 
+  it("keeps each message once", () => {
+    expect(
+      ids(mergeNewest([m(1), m(2), m(3)], [m(2), m(3), m(4)], 10)),
+    ).toEqual([1, 2, 3, 4]);
+    expect(ids(mergeNewest([m(3)], [m(1), m(3), m(3)], 10))).toEqual([1, 3]);
+  });
+
   it("returns the same array without new messages", () => {
     const ms = [m(1)];
     expect(mergeNewest(ms, [], 10)).toBe(ms);

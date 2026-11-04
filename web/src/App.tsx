@@ -14,6 +14,7 @@ import {
 } from "react";
 import { LiveConnection, type LiveState, query } from "./api";
 import { CellMenu, type CellMenuState } from "./CellMenu";
+import { shown } from "./columns";
 import { fileName, save, toCsv, toJson } from "./download";
 import {
   type FieldInput,
@@ -28,7 +29,7 @@ import {
   viewToSearch,
 } from "./filters";
 import { Inspector } from "./Inspector";
-import { LogTable, cellText, defaultVisibility } from "./LogTable";
+import { LogTable, cellText } from "./LogTable";
 import { mergeNewest } from "./merge";
 import { useSettings } from "./settings";
 import { Toolbar } from "./Toolbar";
@@ -39,12 +40,7 @@ interface QueryStatus {
 }
 
 export function App() {
-  const [settings, updateSettings] = useSettings({
-    columnVisibility: defaultVisibility,
-    columnSizing: {},
-    utc: false,
-    limit: 10000,
-  });
+  const [settings, updateSettings] = useSettings();
   // what is entered; it applies at once, except the text of filters and a
   // custom time range, which apply with Enter or Run
   const [view, setView] = useState<View>(() => viewFromSearch(location.search));
@@ -64,6 +60,16 @@ export function App() {
   const [pending, setPending] = useState<LogMessage[]>([]);
   const live = useRef<LiveConnection>(undefined);
   const liveRequest = useRef<ReturnType<typeof liveFilters>>({});
+  // Each start of the live mode, also after a reconnect, loads the newest
+  // messages for its filters and adds the new ones to them. Until the server
+  // confirms a start, messages are of the previous one; while loading, the new
+  // ones wait.
+  const livePhase = useRef<"waiting" | "loading" | "live">("waiting");
+  const sinceStart = useRef<LogMessage[]>([]);
+  const reloadAbort = useRef<AbortController>(undefined);
+  const [liveLoading, setLiveLoading] = useState(false);
+  // counts the loads, to show the newest messages after each
+  const [liveLoads, setLiveLoads] = useState(0);
 
   const limit = settings.limit;
 
@@ -96,8 +102,7 @@ export function App() {
     if (v.mode === "query") {
       void runQuery(v);
     } else {
-      liveRequest.current = liveFilters(v);
-      live.current?.send({ type: "start", filters: liveRequest.current });
+      startLive(liveFilters(v));
     }
   };
 
@@ -137,26 +142,80 @@ export function App() {
   const limitRef = useRef(limit);
   limitRef.current = limit;
 
-  const onLiveEvent = useCallback((event: LiveEvent) => {
-    if (event.type === "error") setError(event.error);
-    if (event.type === "started") setError(undefined);
-    if (event.type !== "messages") return;
-    if (event.dropped > 0) setDropped((d) => d + event.dropped);
-    const add = (prev: LogMessage[]) =>
-      mergeNewest(prev, event.messages, limitRef.current);
-    if (pausedRef.current) setPending(add);
-    else setMessages(add);
+  function startLive(filters: ReturnType<typeof liveFilters>) {
+    reloadAbort.current?.abort();
+    liveRequest.current = filters;
+    livePhase.current = "waiting";
+    setLiveLoading(true);
+    setDropped(0);
+    live.current?.send({ type: "start", filters });
+  }
+
+  const reload = useCallback(async () => {
+    reloadAbort.current?.abort();
+    const controller = new AbortController();
+    reloadAbort.current = controller;
+    livePhase.current = "loading";
+    sinceStart.current = [];
+    setLiveLoading(true);
+    const limit = limitRef.current;
+    try {
+      const res = await query(
+        { filters: liveRequest.current, limit },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      setMessages(mergeNewest(res.messages, sinceStart.current, limit));
+      setPending([]);
+      setLiveLoads((n) => n + 1);
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setError((err as Error).message);
+      const added = sinceStart.current;
+      setMessages((prev) => mergeNewest(prev, added, limit));
+    }
+    livePhase.current = "live";
+    sinceStart.current = [];
+    setLiveLoading(false);
   }, []);
+
+  const onLiveEvent = useCallback(
+    (event: LiveEvent) => {
+      if (event.type === "error") setError(event.error);
+      if (event.type === "started") {
+        setError(undefined);
+        void reload();
+      }
+      if (event.type !== "messages" || livePhase.current === "waiting") return;
+      if (event.dropped > 0) setDropped((d) => d + event.dropped);
+      if (livePhase.current === "loading") {
+        sinceStart.current = mergeNewest(
+          sinceStart.current,
+          event.messages,
+          limitRef.current,
+        );
+        return;
+      }
+      const add = (prev: LogMessage[]) =>
+        mergeNewest(prev, event.messages, limitRef.current);
+      if (pausedRef.current) setPending(add);
+      else setMessages(add);
+    },
+    [reload],
+  );
 
   useEffect(() => {
     if (mode !== "live") return;
     const connection = new LiveConnection(onLiveEvent, setLiveState);
     live.current = connection;
+    livePhase.current = "waiting";
     connection.send({ type: "start", filters: liveRequest.current });
     return () => {
       connection.close();
+      reloadAbort.current?.abort();
       live.current = undefined;
       setLiveState("closed");
+      setLiveLoading(false);
     };
   }, [mode, onLiveEvent]);
 
@@ -183,16 +242,13 @@ export function App() {
     setPaused(p);
   };
 
-  const visibleColumns = fields.filter(
-    (f) => settings.columnVisibility[f.name] !== false,
-  );
   const download = (format: "json" | "csv") => {
     if (format === "json") {
       save(toJson(messages), "application/x-ndjson", fileName("jsonl"));
     } else {
-      const columns = visibleColumns.map((f) => ({
-        id: f.name,
-        label: f.label,
+      const columns = shown(settings.columns).map((id) => ({
+        id,
+        label: fields.find((f) => f.name === id)?.label ?? id,
       }));
       save(
         toCsv(messages, columns, (m, field) =>
@@ -260,21 +316,18 @@ export function App() {
         onDownload={download}
         utc={settings.utc}
         onUtc={(utc) => updateSettings({ utc })}
-        columnVisibility={settings.columnVisibility}
-        onColumnVisibility={(columnVisibility) =>
-          updateSettings({ columnVisibility })
-        }
+        columns={settings.columns}
+        onColumns={(columns) => updateSettings({ columns })}
       />
       <div className="main">
         <LogTable
           messages={messages}
           utc={settings.utc}
-          columnVisibility={settings.columnVisibility}
-          columnSizing={settings.columnSizing}
-          onColumnSizingChange={(columnSizing) =>
-            updateSettings({ columnSizing })
+          columns={settings.columns}
+          onColumns={(change) =>
+            updateSettings((s) => ({ columns: change(s.columns) }))
           }
-          resetKey={mode === "live" ? mode : queryStatus}
+          resetKey={mode === "live" ? liveLoads : queryStatus}
           filters={view.fields}
           onFilter={(field, input: FieldInput) =>
             setView((v) => ({ ...v, fields: { ...v.fields, [field]: input } }))
@@ -300,6 +353,7 @@ export function App() {
         queryStatus={queryStatus}
         loading={loading}
         liveState={liveState}
+        liveLoading={liveLoading}
         paused={paused}
         pending={pending.length}
         dropped={dropped}
@@ -315,6 +369,7 @@ function StatusBar(p: {
   queryStatus: QueryStatus | undefined;
   loading: boolean;
   liveState: LiveState;
+  liveLoading: boolean;
   paused: boolean;
   pending: number;
   dropped: number;
@@ -344,6 +399,7 @@ function StatusBar(p: {
           : "Disconnected, reconnecting…";
     state = [
       connection,
+      p.liveLoading && p.liveState === "live" ? "loading…" : null,
       `${n(p.messages.length)} messages`,
       p.paused && `paused, ${n(p.pending)} new`,
       p.dropped > 0 && `${n(p.dropped)} dropped`,

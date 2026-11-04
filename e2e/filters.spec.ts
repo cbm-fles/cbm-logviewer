@@ -69,9 +69,8 @@ test("filters from the menu of a cell", async ({ page }) => {
     .nth(2);
   const host = await cell.innerText();
   await cell.click({ button: "right" });
-  await page
-    .getByRole("menuitem", { name: new RegExp(`^Exclude Host “${host}”`) })
-    .click();
+  await expect(page.getByRole("menu", { name: `Host: ${host}` })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Exclude this value" }).click();
   await expect(page.getByLabel("Exclude host")).toHaveValue(host);
   await expect(status(page)).not.toHaveText(/^42 of 42/);
   await expect(page.getByRole("row").filter({ hasText: host })).toHaveCount(0);

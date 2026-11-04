@@ -2,24 +2,27 @@ import type { LogMessage } from "@cbm-logviewer/shared";
 
 const time = (m: LogMessage) => m["@timestamp"];
 
-// Merges messages sorted by time into others, keeping the newest `limit`.
-// New messages are mostly at or near the end, so only the tail is merged.
+// Merges messages sorted by time into others, keeping the newest `limit`, and
+// each message once. New messages are mostly at or near the end, so only the
+// tail is merged.
 export function mergeNewest(
   messages: LogMessage[],
   added: LogMessage[],
   limit: number,
 ): LogMessage[] {
   if (added.length === 0) return messages;
-  // the first position whose time is after the first added message
+  // the first position whose time is not before the first added message; a
+  // message that is there already has the same time, so it is in the tail
   let lo = 0;
   let hi = messages.length;
   const first = time(added[0]!);
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (time(messages[mid]!) <= first) lo = mid + 1;
+    if (time(messages[mid]!) < first) lo = mid + 1;
     else hi = mid;
   }
   const tail = messages.slice(lo);
+  const known = new Set(tail.map((m) => m.id));
   const merged: LogMessage[] = messages.slice(0, lo);
   let i = 0;
   let j = 0;
@@ -30,7 +33,11 @@ export function mergeNewest(
     ) {
       merged.push(tail[i++]!);
     } else {
-      merged.push(added[j++]!);
+      const m = added[j++]!;
+      if (!known.has(m.id)) {
+        known.add(m.id);
+        merged.push(m);
+      }
     }
   }
   return merged.length > limit ? merged.slice(merged.length - limit) : merged;

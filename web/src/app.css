@@ -513,5 +513,45 @@ pre.data {
   position: fixed;
   z-index: 20;
   padding: 4px;
-  min-width: 200px;
+  width: 260px;
+  box-sizing: border-box;
+}
+
+.cell-menu-head {
+  padding: 2px 8px 4px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--grid);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* moving columns */
+
+.th-label {
+  cursor: grab;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.th.dragged {
+  opacity: 0.5;
+}
+
+.th.drop-before {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.th.drop-after {
+  box-shadow: inset -3px 0 0 var(--accent);
+}
+
+.menu-list .reset {
+  margin-top: 4px;
 }

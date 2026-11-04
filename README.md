@@ -23,27 +23,33 @@ The repository has three npm workspaces:
 ## Use
 
 In **query mode**, the viewer shows the newest messages of a time range, up to
-a maximum number, the newest at the bottom. In **live mode**, it shows the
-messages as they arrive, in the order of their timestamps, and keeps the newest
-up to the maximum number; it follows the newest while the table is scrolled
-to the end. Pause keeps the new messages until Resume.
+a maximum number, the newest at the bottom. In **live mode**, it first shows
+the newest messages up to the maximum number, then adds the ones that arrive,
+in the order of their timestamps, and keeps the newest up to the maximum
+number. It follows the newest while the table is scrolled to the end. A change
+of the filters loads the newest messages for them again. Pause keeps the new
+messages until Resume.
 
 The buttons TRACE to FATAL choose the severities, TRACE and DEBUG are off at
 first. Under each column header, a message can be required to match a filter
 or to not match it (exclude); Enter applies them. A filter is a list of
 patterns separated by commas, of which one must match, e.g. `node1*, node02`.
-`*` and `?` are wildcards; `\*`, `\?` and `\\` stand for themselves. A pattern in
-double quotes can contain commas, `""` stands for a quote in it. In Message
+`*` and `?` are wildcards; `\*`, `\?` and `\\` stand for themselves. A pattern
+in double quotes can contain commas, `""` stands for a quote in it. In Message
 and Data, a pattern is a phrase, and wildcards apply to single words.
 
 A click on a message shows all its fields beside the table; there, + and −
 add a filter on a value. The arrow keys, Page Up/Down, Home and End move
 through the messages, Escape closes it. A right click on a cell offers the
-same filters and copying the value. The URL has the view, so it can be
-shared as a link. Download saves the messages, as JSON lines with all fields
-or as CSV with the visible columns. Columns shows and hides columns; their widths can be changed by
-dragging the edge of a header, a double click resets it. The browser keeps
-these settings, the maximum number and whether times are in UTC.
+same filters and copying the value. The URL has the view, so it can be shared
+as a link. Download saves the messages, as JSON lines with all fields or as
+CSV with the visible columns.
+
+Columns shows and hides columns. A column moves by dragging its name onto
+another column. Its width changes by dragging the edge of its header, and a
+double click on the edge resets it; Message takes the remaining width until
+its width is set. Reset columns restores them all. The browser keeps these
+settings, the maximum number and whether times are in UTC.
 
 ## API
 

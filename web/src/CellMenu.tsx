@@ -18,7 +18,8 @@ interface Props {
   onClose: () => void;
 }
 
-const shorten = (s: string) => (s.length > 40 ? `${s.slice(0, 40)}…` : s);
+// the width of the menu, see .cell-menu
+const menuWidth = 260;
 
 export function CellMenu({ menu, onFilter, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -57,23 +58,32 @@ export function CellMenu({ menu, onFilter, onClose }: Props) {
 
   // inside the window
   const style = {
-    left: Math.min(menu.x, window.innerWidth - 320),
-    top: Math.min(menu.y, window.innerHeight - 120),
+    left: Math.max(0, Math.min(menu.x, window.innerWidth - menuWidth - 8)),
+    top: Math.max(0, Math.min(menu.y, window.innerHeight - 120)),
   };
 
   return (
-    <div className="menu-list cell-menu" role="menu" ref={ref} style={style}>
+    <div
+      className="menu-list cell-menu"
+      role="menu"
+      aria-label={`${menu.label}: ${menu.value}`}
+      ref={ref}
+      style={style}
+    >
+      <div className="cell-menu-head" title={menu.value}>
+        <span className="muted">{menu.label}:</span> {menu.value || "(empty)"}
+      </div>
       {menu.filter && (
         <>
-          {item(`Match ${menu.label} “${shorten(menu.value)}”`, () =>
+          {item("Match this value", () =>
             onFilter(menu.field, menu.value, "match"),
           )}
-          {item(`Exclude ${menu.label} “${shorten(menu.value)}”`, () =>
+          {item("Exclude this value", () =>
             onFilter(menu.field, menu.value, "exclude"),
           )}
         </>
       )}
-      {item("Copy", () => {
+      {item("Copy value", () => {
         void navigator.clipboard?.writeText(menu.value).catch(() => undefined);
       })}
     </div>

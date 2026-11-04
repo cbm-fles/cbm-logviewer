@@ -1,57 +1,31 @@
 // The table of messages: one line per message, virtualized, so that it stays
-// fast with 100000 messages. TanStack Table manages the columns only: its rows
-// would take some 3 kB per message.
+// fast with 100000 messages.
 
 import { type LogMessage, fields } from "@cbm-logviewer/shared";
-import {
-  type ColumnDef,
-  type ColumnSizingState,
-  type VisibilityState,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
+  useState,
 } from "react";
+import {
+  type Columns,
+  flexColumn,
+  minWidth,
+  move,
+  shown,
+  width,
+} from "./columns";
 import { type FieldInput, type FieldInputs, isFilterField } from "./filters";
 import { formatTime, formatValue, localZone } from "./format";
 
 export const rowHeight = 20;
 
-// the column that takes the remaining width
-const flexColumn = "message";
-
-const sizes: Record<string, number> = {
-  "@timestamp": 190,
-  severity_text: 64,
-  host: 80,
-  service: 90,
-  thread: 100,
-  tid: 70,
-  pid: 70,
-  timeslice: 110,
-  message: 400,
-  message_template: 250,
-  file_name: 140,
-  line: 50,
-  function: 140,
-  version: 170,
-  log_file: 220,
-  data: 220,
-};
-
-const noRows: LogMessage[] = [];
-
-export const defaultVisibility: VisibilityState = Object.fromEntries(
-  fields.map((f) => [f.name, f.visible]),
-);
+const labels = Object.fromEntries(fields.map((f) => [f.name, f.label]));
 
 export function cellText(m: LogMessage, field: string, utc: boolean): string {
   if (field === "@timestamp") return formatTime(m["@timestamp"], utc);
@@ -61,9 +35,8 @@ export function cellText(m: LogMessage, field: string, utc: boolean): string {
 interface Props {
   messages: LogMessage[];
   utc: boolean;
-  columnVisibility: VisibilityState;
-  columnSizing: ColumnSizingState;
-  onColumnSizingChange: (sizing: ColumnSizingState) => void;
+  columns: Columns;
+  onColumns: (change: (c: Columns) => Columns) => void;
   // The newest messages stay in view while it is scrolled to the end. It
   // shows the end, the newest messages, whenever it changes, e.g. per query
   resetKey: unknown;
@@ -77,32 +50,15 @@ interface Props {
 }
 
 export function LogTable(p: Props) {
-  const { messages, utc, columnSizing } = p;
-  const columns = useMemo<ColumnDef<LogMessage>[]>(
-    () =>
-      fields.map((f) => ({
-        id: f.name,
-        header:
-          f.name === "@timestamp"
-            ? `Time (${utc ? "UTC" : localZone()})`
-            : f.label,
-        size: sizes[f.name] ?? 120,
-        minSize: 40,
-      })),
-    [utc],
-  );
-
-  const table = useReactTable({
-    data: noRows,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    columnResizeMode: "onChange",
-    state: { columnVisibility: p.columnVisibility, columnSizing },
-    onColumnSizingChange: (updater) =>
-      p.onColumnSizingChange(
-        typeof updater === "function" ? updater(columnSizing) : updater,
-      ),
-  });
+  const { messages, utc, columns, onColumns } = p;
+  const visible = shown(columns);
+  const isFlex = (id: string) =>
+    id === flexColumn && columns.widths[id] === undefined;
+  const style = (id: string) =>
+    isFlex(id)
+      ? { flex: `1 0 ${width(columns, id)}px` }
+      : { width: width(columns, id), flex: "none" };
+  const totalWidth = visible.reduce((w, id) => w + width(columns, id), 0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -133,6 +89,60 @@ export function LogTable(p: Props) {
       virtualizer.scrollToIndex(messages.length - 1, { align: "end" });
     }
   }, [messages, virtualizer]);
+
+  // Resizing starts from the width on the screen, which for Message can be
+  // more than its width.
+  const [resizing, setResizing] = useState<string>();
+  const startResize = (e: MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const header = (e.target as HTMLElement).parentElement!;
+    const startX = e.clientX;
+    const startWidth = header.getBoundingClientRect().width;
+    setResizing(id);
+    const onMove = (ev: globalThis.MouseEvent) => {
+      const w = Math.max(
+        minWidth,
+        Math.round(startWidth + ev.clientX - startX),
+      );
+      onColumns((c) => ({ ...c, widths: { ...c.widths, [id]: w } }));
+    };
+    const onUp = () => {
+      setResizing(undefined);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+  const resetWidth = (id: string) =>
+    onColumns((c) => {
+      const { [id]: _, ...widths } = c.widths;
+      return { ...c, widths };
+    });
+
+  // a header dragged onto another one moves before it, or after it in its
+  // right half
+  const [dragged, setDragged] = useState<string>();
+  const [dropAt, setDropAt] = useState<{ id: string; after: boolean }>();
+  const onDragOver = (e: DragEvent, id: string) => {
+    if (dragged === undefined) return;
+    e.preventDefault();
+    const r = e.currentTarget.getBoundingClientRect();
+    const after = e.clientX > r.left + r.width / 2;
+    if (dropAt?.id !== id || dropAt.after !== after) setDropAt({ id, after });
+  };
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    if (dragged !== undefined && dropAt) {
+      const target = visible.indexOf(dropAt.id);
+      const before = dropAt.after ? visible[target + 1] : dropAt.id;
+      // before the next shown column, so hidden ones keep their place
+      onColumns((c) => ({ ...c, order: move(c.order, dragged, before) }));
+    }
+    setDragged(undefined);
+    setDropAt(undefined);
+  };
 
   // the arrow keys, page keys, Home and End move the selection
   const onKeyDown = (e: KeyboardEvent) => {
@@ -170,12 +180,6 @@ export function LogTable(p: Props) {
     virtualizer.scrollToIndex(next);
   };
 
-  const headers = table.getHeaderGroups()[0]?.headers ?? [];
-  const visible = table.getVisibleLeafColumns();
-  const width = (id: string, size: number) =>
-    id === flexColumn
-      ? { flex: `1 0 ${size}px` }
-      : { width: size, flex: "none" };
   const filterInput = (field: string, kind: keyof FieldInput) => {
     if (!isFilterField(field)) return null;
     const input = p.filters[field] ?? { match: "", exclude: "" };
@@ -204,38 +208,58 @@ export function LogTable(p: Props) {
       tabIndex={0}
       onKeyDown={onKeyDown}
     >
-      <div
-        className="thead"
-        role="row"
-        style={{ minWidth: table.getTotalSize() }}
-      >
-        {headers.map((h) => (
+      <div className="thead" role="row" style={{ minWidth: totalWidth }}>
+        {visible.map((id) => (
           <div
-            key={h.id}
-            className="th"
+            key={id}
+            className={[
+              "th",
+              dragged === id && "dragged",
+              dropAt?.id === id &&
+                (dropAt.after ? "drop-after" : "drop-before"),
+            ]
+              .filter(Boolean)
+              .join(" ")}
             role="columnheader"
-            style={width(h.column.id, h.getSize())}
+            aria-label={labels[id]}
+            style={style(id)}
+            onDragOver={(e) => onDragOver(e, id)}
+            onDrop={onDrop}
           >
-            <span className="th-label">
-              {flexRender(h.column.columnDef.header, h.getContext())}
+            <span
+              className="th-label"
+              draggable
+              title="Drag to move the column"
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", id);
+                setDragged(id);
+              }}
+              onDragEnd={() => {
+                setDragged(undefined);
+                setDropAt(undefined);
+              }}
+            >
+              {id === "@timestamp"
+                ? `Time (${utc ? "UTC" : localZone()})`
+                : labels[id]}
             </span>
-            {filterInput(h.column.id, "match")}
-            {filterInput(h.column.id, "exclude")}
+            {filterInput(id, "match")}
+            {filterInput(id, "exclude")}
             <div
-              className={`resizer${h.column.getIsResizing() ? " resizing" : ""}`}
-              onMouseDown={h.getResizeHandler()}
-              onTouchStart={h.getResizeHandler()}
-              onDoubleClick={() => h.column.resetSize()}
+              className={`resizer${resizing === id ? " resizing" : ""}`}
+              role="separator"
+              aria-label={`Resize ${labels[id]}`}
+              title="Drag to resize, double click to reset"
+              onMouseDown={(e) => startResize(e, id)}
+              onDoubleClick={() => resetWidth(id)}
             />
           </div>
         ))}
       </div>
       <div
         className="tbody"
-        style={{
-          height: virtualizer.getTotalSize(),
-          minWidth: table.getTotalSize(),
-        }}
+        style={{ height: virtualizer.getTotalSize(), minWidth: totalWidth }}
       >
         {virtualizer.getVirtualItems().map((v) => {
           const m = messages[v.index]!;
@@ -249,8 +273,7 @@ export function LogTable(p: Props) {
               style={{ transform: `translateY(${v.start}px)` }}
               onClick={() => p.onSelect(selected ? undefined : m.id)}
             >
-              {visible.map((column) => {
-                const id = column.id;
+              {visible.map((id) => {
                 const text = cellText(m, id, utc);
                 return (
                   <div
@@ -259,10 +282,8 @@ export function LogTable(p: Props) {
                       id === "severity_text" ? `td sev sev-${text}` : "td"
                     }
                     role="cell"
-                    title={
-                      id === flexColumn || id === "data" ? text : undefined
-                    }
-                    style={width(id, column.getSize())}
+                    title={id === "message" || id === "data" ? text : undefined}
+                    style={style(id)}
                     onContextMenu={(e) => p.onCellMenu(e, m, id)}
                   >
                     {text}
