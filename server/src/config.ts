@@ -1,5 +1,7 @@
 // The configuration of the server, from the environment.
 
+import { resolve } from "node:path";
+
 export interface Config {
   host: string;
   port: number;
@@ -24,6 +26,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     opensearchPassword: password,
     opensearchVerifyTls: env.OPENSEARCH_VERIFY_TLS === "true",
     index: env.LOGVIEWER_INDEX ?? "logs-flesnet-*",
-    webRoot: env.LOGVIEWER_WEB_ROOT || undefined,
+    webRoot: env.LOGVIEWER_WEB_ROOT
+      ? resolve(env.LOGVIEWER_WEB_ROOT)
+      : undefined,
   };
 }

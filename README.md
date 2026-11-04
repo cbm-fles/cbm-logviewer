@@ -20,6 +20,19 @@ The repository has three npm workspaces:
 | `server/` | the server: Fastify, queries OpenSearch as a read-only user |
 | `web/`    | the frontend: React, built with Vite                        |
 
+## Use
+
+In **query mode**, the viewer shows the newest messages of a time range, up to
+a maximum number, the newest at the bottom. In **live mode**, it shows the
+messages as they arrive, in the order of their timestamps, and keeps the newest
+up to the maximum number; it follows the newest while the table is scrolled
+to the end. Pause keeps the new messages until Resume.
+
+The buttons TRACE to FATAL choose the severities, TRACE and DEBUG are off at
+first. Columns shows and hides columns; their widths can be changed by
+dragging the edge of a header, a double click resets it. The browser keeps
+these settings, the maximum number and whether times are in UTC.
+
 ## API
 
 | Request                 |                                                                                      |
@@ -96,6 +109,10 @@ docker run -d --name logviewer-opensearch -p 127.0.0.1:9201:9200 \
   -e DISABLE_INSTALL_DEMO_CONFIG=true \
   docker.io/opensearchproject/opensearch:3.9.0
 OPENSEARCH_TEST_URL=http://localhost:9201 npm test
+
+# the tests in a browser, after npm run build; Playwright starts the server
+npx playwright install chromium
+OPENSEARCH_TEST_URL=http://localhost:9201 npm run test:e2e
 
 # server and frontend with reloading, the frontend on http://localhost:5173
 OPENSEARCH_PASSWORD=... npm run dev:server

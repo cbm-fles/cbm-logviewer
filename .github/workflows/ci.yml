@@ -33,6 +33,10 @@ jobs:
       - run: npm test
         env:
           OPENSEARCH_TEST_URL: http://localhost:9200
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          OPENSEARCH_TEST_URL: http://localhost:9200
 
   image:
     needs: check
