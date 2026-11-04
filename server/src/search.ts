@@ -22,7 +22,7 @@ interface Hit {
 
 // Numbers beyond 2^53 in data lose precision, as the client does not parse
 // them as BigInt: that is several times slower. data_text keeps them exactly.
-function toMessage(hit: Hit): LogMessage {
+export function toMessage(hit: Pick<Hit, "_id" | "_source">): LogMessage {
   return { id: hit._id, ...hit._source } as LogMessage;
 }
 
@@ -32,7 +32,7 @@ type Aggregations = Record<
 >;
 
 // The client's types of aggregations lack common fields such as `field`.
-function aggregations(aggs: Record<string, unknown>): Aggregations {
+export function aggregations(aggs: Record<string, unknown>): Aggregations {
   return aggs as Aggregations;
 }
 

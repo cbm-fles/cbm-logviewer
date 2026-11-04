@@ -55,3 +55,30 @@ export const statsBodySchema = {
     buckets: { type: "integer", minimum: 1, maximum: 1000 },
   },
 } as const;
+
+// live mode has no time range
+const {
+  from: _from,
+  to: _to,
+  ...liveFilterProperties
+} = filtersSchema.properties;
+
+export const liveRequestSchema = {
+  oneOf: [
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["type", "filters"],
+      properties: {
+        type: { const: "start" },
+        filters: { ...filtersSchema, properties: liveFilterProperties },
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["type"],
+      properties: { type: { const: "stop" } },
+    },
+  ],
+} as const;

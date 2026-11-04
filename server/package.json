@@ -11,10 +11,13 @@
     "@cbm-logviewer/shared": "*",
     "@fastify/compress": "^8.3.1",
     "@fastify/static": "^8.2.0",
+    "@fastify/websocket": "^11.3.7",
     "@opensearch-project/opensearch": "^3.5.0",
+    "ajv": "^8.20.0",
     "fastify": "^5.4.0"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.2",
     "tsx": "^4.20.0"
   }
 }

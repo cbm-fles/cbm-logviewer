@@ -6,10 +6,12 @@ import {
 } from "@cbm-logviewer/shared";
 import fastifyCompress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
+import fastifyWebsocket from "@fastify/websocket";
 import type { Client } from "@opensearch-project/opensearch";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import type { Config } from "./config.js";
 import { FilterError } from "./dsl.js";
+import { type LiveSocketOptions, serveLive } from "./liveSocket.js";
 import { queryBodySchema, statsBodySchema } from "./schemas.js";
 import { Search } from "./search.js";
 
@@ -27,6 +29,7 @@ export function buildApp(
   config: Config,
   client: Client,
   options: FastifyServerOptions = { logger: true },
+  liveOptions: LiveSocketOptions = {},
 ) {
   // reject unknown properties instead of dropping them
   const app = Fastify({
@@ -53,6 +56,8 @@ export function buildApp(
     return reply.code(502).send({ error: "OpenSearch request failed" });
   });
 
+  app.register(fastifyWebsocket);
+
   // in a plugin, as the hooks of compression apply only to the routes that
   // are registered after it
   app.register(async (api) => {
@@ -71,6 +76,10 @@ export function buildApp(
     });
 
     api.get("/api/fields", async () => fields);
+
+    api.get("/api/live", { websocket: true }, (socket, req) =>
+      serveLive(socket, client, config.index, req.log, liveOptions),
+    );
 
     api.post<{ Body: QueryRequest }>(
       "/api/query",

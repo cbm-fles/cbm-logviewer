@@ -22,13 +22,14 @@ The repository has three npm workspaces:
 
 ## API
 
-| Request                 |                                                                            |
-| ----------------------- | -------------------------------------------------------------------------- |
-| `GET /api/status`       | whether OpenSearch is available                                            |
-| `GET /api/fields`       | the fields of the messages                                                 |
-| `POST /api/query`       | the newest `limit` messages that pass `filters`, the oldest first          |
-| `POST /api/stats`       | the number of messages per severity and over time                          |
-| `GET /api/values/FIELD` | the most frequent values of a keyword field, by default of the last 7 days |
+| Request                 |                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| `GET /api/status`       | whether OpenSearch is available                                                      |
+| `GET /api/fields`       | the fields of the messages                                                           |
+| `POST /api/query`       | the newest `limit` messages that pass `filters`, the oldest first                    |
+| `POST /api/stats`       | the number of messages per severity and over time                                    |
+| `GET /api/values/FIELD` | the most frequent values of a keyword field, by default of the last 7 days           |
+| `GET /api/live`         | WebSocket: the messages as they arrive, see [shared/src/live.ts](shared/src/live.ts) |
 
 The filters and the responses are defined in
 [shared/src/query.ts](shared/src/query.ts), e.g.:
@@ -47,6 +48,14 @@ The filters and the responses are defined in
   "limit": 10000
 }
 ```
+
+In live mode, the browser sends `{"type": "start", "filters": {...}}` (without
+a time range) or `{"type": "stop"}`, and gets the new messages about once a
+second. The server follows the indices by `_seq_no`, the order in which
+messages arrive, so it also shows messages that arrive late, e.g. from a node
+whose Fluent Bit was buffering, each once. If there are more than 5000 new
+messages in a second, or the browser does not keep up, the rest is dropped
+and counted, so that the view stays current.
 
 Times are ISO timestamps or `now`, `now-<n><unit>` with the units `ms`, `s`,
 `m`, `h`, `d` and `w`; the server resolves them once per request.
