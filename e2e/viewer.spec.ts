@@ -71,7 +71,7 @@ test("applies filters in live mode to the messages shown", async ({ page }) => {
   await page
     .getByRole("cell", { name: "second warning" })
     .click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Exclude this value" }).click();
+  await page.getByRole("menuitem", { name: "Exclude", exact: true }).click();
   await expect(page.getByRole("cell", { name: "second warning" })).toHaveCount(
     0,
   );

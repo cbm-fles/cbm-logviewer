@@ -6,13 +6,11 @@ import { type Columns, defaultColumns, normalize } from "./columns";
 export interface Settings {
   columns: Columns;
   utc: boolean;
-  limit: number;
 }
 
 const defaults: Settings = {
   columns: defaultColumns,
   utc: false,
-  limit: 10000,
 };
 
 const key = "cbm-logviewer.settings";
@@ -24,7 +22,6 @@ function load(): Settings {
     ) as Partial<Settings>;
     return {
       utc: typeof stored.utc === "boolean" ? stored.utc : defaults.utc,
-      limit: typeof stored.limit === "number" ? stored.limit : defaults.limit,
       columns: normalize(stored.columns),
     };
   } catch {

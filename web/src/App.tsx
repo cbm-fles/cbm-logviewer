@@ -2,6 +2,7 @@ import {
   type LiveEvent,
   type LogMessage,
   fields,
+  maxQueryLimit,
   severities,
 } from "@cbm-logviewer/shared";
 import {
@@ -21,6 +22,7 @@ import {
   type Mode,
   type View,
   addPattern,
+  countFilters,
   isFilterField,
   literalPattern,
   liveFilters,
@@ -28,11 +30,15 @@ import {
   viewFromSearch,
   viewToSearch,
 } from "./filters";
+import { FilterPanel } from "./FilterPanel";
 import { Inspector } from "./Inspector";
 import { LogTable, cellText } from "./LogTable";
 import { mergeNewest } from "./merge";
 import { useSettings } from "./settings";
 import { Toolbar } from "./Toolbar";
+
+// the number of messages of a query, and kept in live mode
+const limit = maxQueryLimit;
 
 interface QueryStatus {
   total: number;
@@ -49,6 +55,9 @@ export function App() {
   const [error, setError] = useState<string>();
   const [selected, setSelected] = useState<LogMessage>();
   const [menu, setMenu] = useState<CellMenuState>();
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // the filters of the columns that apply, which can differ from what is entered
+  const [applied, setApplied] = useState<View["fields"]>({});
 
   const [loading, setLoading] = useState(false);
   const [queryStatus, setQueryStatus] = useState<QueryStatus>();
@@ -71,34 +80,30 @@ export function App() {
   // counts the loads, to show the newest messages after each
   const [liveLoads, setLiveLoads] = useState(0);
 
-  const limit = settings.limit;
-
-  const runQuery = useCallback(
-    async (v: View) => {
-      abort.current?.abort();
-      const controller = new AbortController();
-      abort.current = controller;
-      setLoading(true);
-      setError(undefined);
-      try {
-        const res = await query(
-          { filters: queryFilters(v), limit },
-          controller.signal,
-        );
-        setMessages(res.messages);
-        setQueryStatus({ total: res.total, tookMs: res.took_ms });
-      } catch (err) {
-        if (!controller.signal.aborted) setError((err as Error).message);
-      } finally {
-        if (abort.current === controller) setLoading(false);
-      }
-    },
-    [limit],
-  );
+  const runQuery = useCallback(async (v: View) => {
+    abort.current?.abort();
+    const controller = new AbortController();
+    abort.current = controller;
+    setLoading(true);
+    setError(undefined);
+    try {
+      const res = await query(
+        { filters: queryFilters(v), limit },
+        controller.signal,
+      );
+      setMessages(res.messages);
+      setQueryStatus({ total: res.total, tookMs: res.took_ms });
+    } catch (err) {
+      if (!controller.signal.aborted) setError((err as Error).message);
+    } finally {
+      if (abort.current === controller) setLoading(false);
+    }
+  }, []);
 
   // Applies a view: in the URL, and in a query or the live mode.
   const apply = (v: View) => {
     history.replaceState(null, "", viewToSearch(v) || location.pathname);
+    setApplied(v.fields);
     if (v.mode === "query") {
       void runQuery(v);
     } else {
@@ -136,11 +141,17 @@ export function App() {
     apply(v);
   };
 
-  // the live mode; the refs let the connection's callback see current values
+  const clearFilter = (field: string) => {
+    if (!isFilterField(field)) return;
+    const { [field]: _, ...rest } = view.fields;
+    const v = { ...view, fields: rest };
+    setView(v);
+    apply(v);
+  };
+
+  // the live mode; the ref lets the connection's callback see the current value
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
-  const limitRef = useRef(limit);
-  limitRef.current = limit;
 
   function startLive(filters: ReturnType<typeof liveFilters>) {
     reloadAbort.current?.abort();
@@ -158,7 +169,6 @@ export function App() {
     livePhase.current = "loading";
     sinceStart.current = [];
     setLiveLoading(true);
-    const limit = limitRef.current;
     try {
       const res = await query(
         { filters: liveRequest.current, limit },
@@ -192,12 +202,12 @@ export function App() {
         sinceStart.current = mergeNewest(
           sinceStart.current,
           event.messages,
-          limitRef.current,
+          limit,
         );
         return;
       }
       const add = (prev: LogMessage[]) =>
-        mergeNewest(prev, event.messages, limitRef.current);
+        mergeNewest(prev, event.messages, limit);
       if (pausedRef.current) setPending(add);
       else setMessages(add);
     },
@@ -264,16 +274,20 @@ export function App() {
     e.preventDefault();
     const label = fields.find((f) => f.name === field)?.label ?? field;
     const raw = (m as unknown as Record<string, unknown>)[field];
+    const input = isFilterField(field) ? view.fields[field] : undefined;
     setMenu({
       x: e.clientX,
       y: e.clientY,
+      id: m.id,
       field,
       label,
       value:
         field === "@timestamp"
           ? m["@timestamp"]
           : cellText(m, field, settings.utc),
-      filter: isFilterField(field) && raw !== undefined && raw !== null,
+      filterable: isFilterField(field),
+      hasValue: raw !== undefined && raw !== null && raw !== "",
+      hasFilter: input !== undefined && countFilters({ [field]: input }) > 0,
     });
   };
   const closeMenu = useCallback(() => setMenu(undefined), []);
@@ -286,9 +300,20 @@ export function App() {
     apply(view);
   });
 
-  const hasFieldFilters = Object.values(view.fields).some(
-    (f) => f.match.trim() || f.exclude.trim(),
-  );
+  // the inspector closes when its message is not shown any more
+  useEffect(() => {
+    if (selected && !messages.some((m) => m.id === selected.id)) {
+      setSelected(undefined);
+    }
+  }, [messages, selected]);
+
+  const clearFilters = () => {
+    const v = { ...view, fields: {} };
+    setView(v);
+    apply(v);
+  };
+  const setFilter = (field: string, input: FieldInput) =>
+    setView((v) => ({ ...v, fields: { ...v.fields, [field]: input } }));
 
   return (
     <div className="app">
@@ -296,14 +321,9 @@ export function App() {
         view={view}
         onView={changeView}
         onMode={changeMode}
-        hasFieldFilters={hasFieldFilters}
-        onClearFilters={() => {
-          const v = { ...view, fields: {} };
-          setView(v);
-          apply(v);
-        }}
-        limit={limit}
-        onLimit={(l) => updateSettings({ limit: l })}
+        filterCount={countFilters(applied)}
+        onClearFilters={clearFilters}
+        onEditFilters={() => setFiltersOpen(true)}
         onQuery={() => apply(view)}
         loading={loading}
         paused={paused}
@@ -329,24 +349,44 @@ export function App() {
           }
           resetKey={mode === "live" ? liveLoads : queryStatus}
           filters={view.fields}
-          onFilter={(field, input: FieldInput) =>
-            setView((v) => ({ ...v, fields: { ...v.fields, [field]: input } }))
-          }
+          onFilter={setFilter}
           onApply={() => apply(view)}
           selected={selected?.id}
           onSelect={(id) => setSelected(messages.find((m) => m.id === id))}
           onCellMenu={openMenu}
         />
-        {selected && (
-          <Inspector
-            message={selected}
-            utc={settings.utc}
-            onFilter={filterOn}
-            onClose={() => setSelected(undefined)}
-          />
+        {(selected || filtersOpen) && (
+          <div className="side">
+            {selected && (
+              <Inspector
+                message={selected}
+                utc={settings.utc}
+                onFilter={filterOn}
+                onClose={() => setSelected(undefined)}
+              />
+            )}
+            {filtersOpen && (
+              <FilterPanel
+                filters={view.fields}
+                columns={settings.columns}
+                onFilter={setFilter}
+                onApply={() => apply(view)}
+                onClear={clearFilters}
+                onClose={() => setFiltersOpen(false)}
+              />
+            )}
+          </div>
         )}
       </div>
-      {menu && <CellMenu menu={menu} onFilter={filterOn} onClose={closeMenu} />}
+      {menu && (
+        <CellMenu
+          menu={menu}
+          onFilter={filterOn}
+          onClearFilter={clearFilter}
+          onInspect={(id) => setSelected(messages.find((m) => m.id === id))}
+          onClose={closeMenu}
+        />
+      )}
       <StatusBar
         mode={mode}
         messages={messages}
@@ -388,7 +428,7 @@ function StatusBar(p: {
     state = p.loading
       ? "Querying…"
       : p.queryStatus
-        ? `${n(p.messages.length)} of ${n(p.queryStatus.total)} messages, in ${(p.queryStatus.tookMs / 1000).toFixed(1)} s`
+        ? `${n(p.messages.length)} of ${n(p.queryStatus.total)} messages${p.queryStatus.total > p.messages.length ? ` (the newest ${n(limit)})` : ""}, in ${(p.queryStatus.tookMs / 1000).toFixed(1)} s`
         : "";
   } else {
     const connection =

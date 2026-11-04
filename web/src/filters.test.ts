@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addPattern,
+  countFilters,
   defaultView,
   literalPattern,
   liveFilters,
@@ -70,6 +71,19 @@ describe("filters", () => {
       host: { match: ["node1*", "node02"] },
       service: { exclude: ["tsclient"] },
     });
+  });
+});
+
+describe("the number of filters", () => {
+  it("counts match and exclude with patterns", () => {
+    expect(countFilters({})).toBe(0);
+    expect(
+      countFilters({
+        host: { match: "node1*", exclude: "node12" },
+        service: { match: " , ", exclude: "" },
+        message: { match: "", exclude: "x" },
+      }),
+    ).toBe(3);
   });
 });
 

@@ -70,7 +70,7 @@ test("filters from the menu of a cell", async ({ page }) => {
   const host = await cell.innerText();
   await cell.click({ button: "right" });
   await expect(page.getByRole("menu", { name: `Host: ${host}` })).toBeVisible();
-  await page.getByRole("menuitem", { name: "Exclude this value" }).click();
+  await page.getByRole("menuitem", { name: "Exclude", exact: true }).click();
   await expect(page.getByLabel("Exclude host")).toHaveValue(host);
   await expect(status(page)).not.toHaveText(/^42 of 42/);
   await expect(page.getByRole("row").filter({ hasText: host })).toHaveCount(0);
@@ -140,15 +140,70 @@ test("shows and filters the instance, which not all messages have", async ({
     page.getByRole("cell", { name: "second warning" }),
   ).toBeVisible();
 
-  // an empty cell offers no filter
+  // an empty cell offers no filter on its value, but clearing the filter
   await row("second warning")
     .getByRole("cell")
     .nth(4)
     .click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Copy" })).toBeEnabled();
   await expect(
-    page.getByRole("menuitem", { name: "Copy value" }),
-  ).toBeVisible();
+    page.getByRole("menuitem", { name: "Match", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("menuitem", { name: "Clear filter" }).click();
+  await expect(status(page)).toHaveText(/^42 of 42/);
+});
+
+test("closes the inspector when its message is filtered out", async ({
+  page,
+}) => {
+  await page.getByRole("cell", { name: "first warning" }).click();
+  const inspector = page.getByRole("complementary", { name: "Message" });
+  await expect(inspector).toBeVisible();
+  await page.getByLabel("Exclude message").fill("first");
+  await page.getByLabel("Exclude message").press("Enter");
+  await expect(status(page)).toHaveText(/^41 of 41/);
+  await expect(inspector).toHaveCount(0);
+});
+
+test("shows the message of a cell in the inspector from its menu", async ({
+  page,
+}) => {
+  await page.getByRole("cell", { name: "status 3", exact: true }).click({
+    button: "right",
+  });
+  await page.getByRole("menuitem", { name: "Inspect" }).click();
   await expect(
-    page.getByRole("menuitem", { name: "Match this value" }),
-  ).toHaveCount(0);
+    page.getByRole("complementary", { name: "Message" }),
+  ).toContainText("status 3");
+});
+
+test("lists all filters in a panel, also of hidden columns", async ({
+  page,
+}) => {
+  await expect(page.getByRole("button", { name: "Filters" })).toBeVisible();
+  await page.getByLabel("Match host").fill("node0*");
+  await page.getByLabel("Match host").press("Enter");
+  await expect(page.locator(".filter-count")).toHaveText("1 filter active");
+
+  // a filter of a hidden column, from the panel
+  await page.getByRole("button", { name: "Edit" }).click();
+  const panel = page.getByRole("region", { name: "Filters" });
+  await expect(panel.getByLabel("Match Host in all filters")).toHaveValue(
+    "node0*",
+  );
+  await expect(panel).toContainText("PID (hidden)");
+  await panel.getByLabel("Exclude Message in all filters").fill("status*");
+  await panel.getByRole("button", { name: "Apply" }).click();
+  await expect(status(page)).toHaveText(/^2 of 2/);
+  await expect(page.locator(".filter-count")).toHaveText("2 filters active");
+  // the same filter under the column header
+  await expect(page.getByLabel("Exclude message", { exact: true })).toHaveValue(
+    "status*",
+  );
+
+  await panel.getByRole("button", { name: "Clear all" }).click();
+  await expect(status(page)).toHaveText(/^42 of 42/);
+  await expect(page.locator(".filter-count")).toHaveCount(0);
+  await panel.getByRole("button", { name: "Close filters" }).click();
+  await expect(panel).toHaveCount(0);
 });

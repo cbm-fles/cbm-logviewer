@@ -23,10 +23,9 @@ The repository has three npm workspaces:
 ## Use
 
 In **query mode**, the viewer shows the newest messages of a time range, up to
-a maximum number, the newest at the bottom. In **live mode**, it first shows
-the newest messages up to the maximum number, then adds the ones that arrive,
-in the order of their timestamps, and keeps the newest up to the maximum
-number. It follows the newest while the table is scrolled to the end. A change
+100,000, the newest at the bottom. In **live mode**, it first shows the newest
+100,000 messages, then adds the ones that arrive, in the order of their
+timestamps, and keeps the newest 100,000. It follows the newest while the table is scrolled to the end. A change
 of the filters loads the newest messages for them again. Pause keeps the new
 messages until Resume.
 
@@ -38,10 +37,14 @@ patterns separated by commas, of which one must match, e.g. `node1*, node02`.
 in double quotes can contain commas, `""` stands for a quote in it. In Message
 and Data, a pattern is a phrase, and wildcards apply to single words.
 
+The toolbar shows how many filters of columns are active; Edit lists them all
+beside the table, also those of hidden columns, with the syntax of patterns.
+
 A click on a message shows all its fields beside the table; there, + and −
 add a filter on a value. The arrow keys, Page Up/Down, Home and End move
-through the messages, Escape closes it. A right click on a cell offers the
-same filters and copying the value. The URL has the view, so it can be shared
+through the messages, Escape closes it. A right click on a cell offers to
+match or exclude its value, to clear the filter of its column, to copy the
+value and to inspect the message. The URL has the view, so it can be shared
 as a link. Download saves the messages, as JSON lines with all fields or as
 CSV with the visible columns.
 
@@ -49,7 +52,7 @@ Columns shows and hides columns. A column moves by dragging its name onto
 another column. Its width changes by dragging the edge of its header, and a
 double click on the edge resets it; Message takes the remaining width until
 its width is set. Reset columns restores them all. The browser keeps these
-settings, the maximum number and whether times are in UTC.
+settings and whether times are in UTC.
 
 ## API
 

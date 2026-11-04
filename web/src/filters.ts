@@ -112,6 +112,16 @@ function localToIso(value: string): string | undefined {
   return value && !Number.isNaN(d.getTime()) ? d.toISOString() : undefined;
 }
 
+// the number of match and exclude filters that have a pattern
+export function countFilters(fields: FieldInputs): number {
+  let n = 0;
+  for (const input of Object.values(fields)) {
+    if (parsePatterns(input.match).length > 0) n++;
+    if (parsePatterns(input.exclude).length > 0) n++;
+  }
+  return n;
+}
+
 export function fieldFilters(fields: FieldInputs): Filters["fields"] {
   const result: Partial<Record<FilterField, FieldFilter>> = {};
   for (const [field, input] of Object.entries(fields) as [

@@ -5,16 +5,14 @@ import { type Columns, defaultColumns } from "./columns";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type Mode, type RangeId, type View, ranges } from "./filters";
 
-export const limits = [1000, 10000, 100000];
-
 interface Props {
   view: View;
   onView: (change: Partial<View>) => void;
   onMode: (mode: Mode) => void;
-  hasFieldFilters: boolean;
+  // the number of filters of the columns
+  filterCount: number;
   onClearFilters: () => void;
-  limit: number;
-  onLimit: (limit: number) => void;
+  onEditFilters: () => void;
   onQuery: () => void;
   loading: boolean;
   paused: boolean;
@@ -105,19 +103,6 @@ export function Toolbar(p: Props) {
       </div>
 
       <div className="group">
-        <select
-          aria-label={
-            view.mode === "query" ? "Maximum messages" : "Messages kept"
-          }
-          value={p.limit}
-          onChange={(e) => p.onLimit(Number(e.target.value))}
-        >
-          {limits.map((l) => (
-            <option key={l} value={l}>
-              {l.toLocaleString("en")} messages
-            </option>
-          ))}
-        </select>
         {view.mode === "query" ? (
           <button
             type="button"
@@ -141,9 +126,25 @@ export function Toolbar(p: Props) {
             </button>
           </>
         )}
-        {p.hasFieldFilters && (
-          <button type="button" onClick={p.onClearFilters}>
-            Clear filters
+      </div>
+
+      <div className="group filters-summary">
+        {p.filterCount > 0 ? (
+          <>
+            <span className="filter-count">
+              {p.filterCount} {p.filterCount === 1 ? "filter" : "filters"}{" "}
+              active
+            </span>
+            <button type="button" onClick={p.onEditFilters}>
+              Edit
+            </button>
+            <button type="button" onClick={p.onClearFilters}>
+              Clear filters
+            </button>
+          </>
+        ) : (
+          <button type="button" onClick={p.onEditFilters}>
+            Filters
           </button>
         )}
       </div>

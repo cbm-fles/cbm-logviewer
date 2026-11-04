@@ -415,13 +415,83 @@ input.filter.exclude:not(:placeholder-shown) {
   min-width: 0;
 }
 
-.inspector {
+/* the inspector and the filters beside the table, one above the other */
+
+.side {
   width: 400px;
   flex: none;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-left: 1px solid var(--border);
   background: var(--bg);
   font-size: 12px;
+}
+
+.inspector {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.filter-panel {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 60%;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+
+.side > .filter-panel:first-child {
+  border-top: none;
+  max-height: none;
+}
+
+.panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--toolbar);
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-head .title {
+  margin-right: auto;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 3px 6px;
+  align-items: center;
+  padding: 6px 12px;
+}
+
+.filter-row {
+  display: contents;
+}
+
+.hidden-note {
+  font-size: 11px;
+}
+
+.syntax {
+  margin: 4px 12px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.syntax code {
+  font-size: 11px;
+}
+
+.filter-count {
+  font-weight: 600;
+  color: var(--accent);
 }
 
 .inspector-head {
@@ -512,24 +582,60 @@ pre.data {
 .cell-menu {
   position: fixed;
   z-index: 20;
-  padding: 4px;
-  width: 260px;
+  padding: 0 0 4px;
+  width: 240px;
   box-sizing: border-box;
+  gap: 0;
+  overflow: hidden;
 }
 
 .cell-menu-head {
-  padding: 2px 8px 4px;
-  margin-bottom: 2px;
-  border-bottom: 1px solid var(--grid);
-  font-size: 12px;
+  padding: 6px 12px;
+  margin-bottom: 4px;
+  background: var(--toolbar);
+  border-bottom: 1px solid var(--border);
+}
+
+.cell-menu-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.cell-menu-value {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.menu-item {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.cell-menu .menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 0;
+}
+
+.menu-item:disabled {
+  opacity: 0.4;
+}
+
+.menu-item:disabled:hover {
+  background: none;
+}
+
+.icon-match {
+  color: var(--sev-NOTICE);
+}
+
+.icon-exclude,
+.icon-clear {
+  color: var(--sev-ERROR);
+}
+
+.icon-copy,
+.icon-inspect {
+  color: var(--accent);
 }
 
 /* moving columns */
