@@ -43,13 +43,13 @@ const mappings = {
   },
 };
 
-// 30 messages: 10 timestamps one ms apart, each with a status message in the
+// 30 messages: 10 timestamps one hour apart, each with a status message in the
 // oper index and a debug and a warning message in the debug and oper
 // indices, so that messages share timestamps across indices.
 function messages() {
   const docs: { index: string; doc: Record<string, unknown> }[] = [];
   for (let i = 0; i < 10; i++) {
-    const ts = `2026-11-04T10:00:00.${String(i).padStart(3, "0")}123456Z`;
+    const ts = `2026-11-04T${10 + i}:00:00.000123456Z`;
     const base = {
       "@timestamp": ts,
       host: `node0${i % 3}`,
@@ -149,10 +149,10 @@ describe.skipIf(!url)("Search against OpenSearch", () => {
     expect(res.total).toBe(30);
     expect(res.messages).toHaveLength(10);
     expect(res.messages.at(-1)!["@timestamp"]).toBe(
-      "2026-11-04T10:00:00.009123456Z",
+      "2026-11-04T19:00:00.000123456Z",
     );
     expect(res.messages[0]!["@timestamp"]).toBe(
-      "2026-11-04T10:00:00.006123456Z",
+      "2026-11-04T16:00:00.000123456Z",
     );
   });
 
@@ -203,8 +203,25 @@ describe.skipIf(!url)("Search against OpenSearch", () => {
     const res = await search.stats({ filters: {}, buckets: 10 });
     expect(res.total).toBe(30);
     expect(res.by_severity).toEqual({ DEBUG: 10, INFO: 10, WARN: 10 });
-    const sum = res.histogram.buckets.reduce((n, b) => n + b.count, 0);
-    expect(sum).toBe(30);
+    expect(res.histogram.interval).toBe("1h");
+    expect(res.histogram.buckets).toHaveLength(10);
+    expect(res.histogram.buckets[0]).toEqual({
+      time: "2026-11-04T10:00:00.000Z",
+      count: 3,
+      by_severity: { DEBUG: 1, INFO: 1, WARN: 1 },
+    });
+  });
+
+  it("covers the time range of the filters in the histogram", async () => {
+    const res = await search.stats({
+      filters: { from: "2026-11-04T06:00:00Z", to: "2026-11-04T12:00:00Z" },
+      buckets: 7,
+    });
+    expect(res.total).toBe(9);
+    expect(res.histogram.interval).toBe("1h");
+    expect(res.histogram.buckets.map((b) => b.count)).toEqual([
+      0, 0, 0, 0, 3, 3, 3,
+    ]);
   });
 
   it("serves queries over HTTP", async () => {

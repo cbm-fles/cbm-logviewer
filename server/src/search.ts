@@ -11,6 +11,8 @@ import type {
 } from "@cbm-logviewer/shared";
 import type { Client, Types } from "@opensearch-project/opensearch";
 import { buildQuery, newestFirst } from "./dsl.js";
+import { chooseInterval } from "./interval.js";
+import { resolveTimes } from "./time.js";
 
 interface Hit {
   _id: string;
@@ -18,23 +20,20 @@ interface Hit {
   sort: Types.Common.SortResults;
 }
 
-// The client parses numbers beyond 2^53 as BigInt, which JSON cannot hold.
-function withoutBigInt(value: unknown): unknown {
-  if (typeof value === "bigint") return value.toString();
-  if (Array.isArray(value)) return value.map(withoutBigInt);
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, withoutBigInt(v)]),
-    );
-  }
-  return value;
+// Numbers beyond 2^53 in data lose precision, as the client does not parse
+// them as BigInt: that is several times slower. data_text keeps them exactly.
+function toMessage(hit: Hit): LogMessage {
+  return { id: hit._id, ...hit._source } as LogMessage;
 }
 
-function toMessage(hit: Hit): LogMessage {
-  return {
-    id: hit._id,
-    ...(withoutBigInt(hit._source) as object),
-  } as LogMessage;
+type Aggregations = Record<
+  string,
+  Types.Common_Aggregations.AggregationContainer
+>;
+
+// The client's types of aggregations lack common fields such as `field`.
+function aggregations(aggs: Record<string, unknown>): Aggregations {
+  return aggs as Aggregations;
 }
 
 function total(body: { hits: { total?: unknown } }): number {
@@ -56,7 +55,7 @@ export class Search {
   // newest backwards, returned the oldest first.
   async query(req: QueryRequest): Promise<QueryResponse> {
     const start = Date.now();
-    const query = buildQuery(req.filters);
+    const query = buildQuery(resolveTimes(req.filters));
     const messages: LogMessage[] = [];
     let after: Types.Common.SortResults | undefined;
     let count = 0;
@@ -76,50 +75,92 @@ export class Search {
       const hits = body.hits.hits as unknown as Hit[];
       for (const hit of hits) messages.push(toMessage(hit));
       if (hits.length === 0 || messages.length >= count) break;
-      after = hits.at(-1)!.sort;
+      // The sort value of @timestamp is in ns, beyond 2^53, so the client
+      // cannot parse it exactly. OpenSearch also takes the timestamp itself.
+      const last = hits.at(-1)!;
+      after = [last._source["@timestamp"] as string, ...last.sort.slice(1)];
     }
     messages.reverse();
     return { messages, total: count, took_ms: Date.now() - start };
   }
 
   async stats(req: StatsRequest): Promise<StatsResponse> {
+    const now = new Date();
+    const filters = resolveTimes(req.filters, now);
+    const query = buildQuery(filters);
     const bySeverity = { terms: { field: "severity_text", size: 20 } };
-    const { body } = await this.client.search({
+
+    const { body: span } = await this.client.search({
       index: this.index,
       ignore_unavailable: true,
       body: {
-        query: buildQuery(req.filters),
+        query,
         size: 0,
         track_total_hits: true,
-        aggs: {
+        aggs: aggregations({
           by_severity: bySeverity,
-          histogram: {
-            auto_date_histogram: {
-              field: "@timestamp",
-              buckets: req.buckets ?? 100,
-            },
-            aggs: { by_severity: bySeverity },
-          },
-        },
+          min: { min: { field: "@timestamp" } },
+          max: { max: { field: "@timestamp" } },
+        }),
       },
     });
-    const aggs = body.aggregations as unknown as StatsAggregations | undefined;
+    const spanAggs = span.aggregations as unknown as
+      SpanAggregations | undefined;
     const counts = (agg: TermsAggregation | undefined) =>
       Object.fromEntries(
         (agg?.buckets ?? []).map((b) => [b.key, Number(b.doc_count)]),
       );
-    return {
-      total: total(body),
-      by_severity: counts(aggs?.by_severity),
-      histogram: {
-        interval: aggs?.histogram.interval ?? "",
-        buckets: (aggs?.histogram.buckets ?? []).map((b) => ({
-          time: b.key_as_string,
-          count: Number(b.doc_count),
-          by_severity: counts(b.by_severity),
-        })),
-      },
+    const result: StatsResponse = {
+      total: total(span),
+      by_severity: counts(spanAggs?.by_severity),
+      histogram: { interval: "", buckets: [] },
     };
+    // the histogram covers the time range of the filters, or else of the
+    // messages
+    const min = filters.from ?? spanAggs?.min.value_as_string;
+    const max =
+      filters.to ??
+      (filters.from !== undefined
+        ? now.toISOString()
+        : spanAggs?.max.value_as_string);
+    if (result.total === 0 || min === undefined || max === undefined) {
+      return result;
+    }
+
+    const interval = chooseInterval(
+      Date.parse(max) - Date.parse(min),
+      req.buckets ?? 100,
+    );
+    const { body } = await this.client.search({
+      index: this.index,
+      ignore_unavailable: true,
+      body: {
+        query,
+        size: 0,
+        aggs: aggregations({
+          histogram: {
+            date_histogram: {
+              field: "@timestamp",
+              fixed_interval: interval,
+              min_doc_count: 0,
+              extended_bounds: { min, max },
+            },
+            aggs: { by_severity: bySeverity },
+          },
+        }),
+      },
+    });
+    const aggs = body.aggregations as unknown as
+      HistogramAggregations | undefined;
+    result.histogram = {
+      interval,
+      buckets: (aggs?.histogram.buckets ?? []).map((b) => ({
+        time: b.key_as_string,
+        count: Number(b.doc_count),
+        by_severity: counts(b.by_severity),
+      })),
+    };
+    return result;
   }
 
   // The most frequent values of a keyword field
@@ -128,15 +169,14 @@ export class Search {
     filters: Filters,
     size = 100,
   ): Promise<ValuesResponse> {
-    // not inline, as the client's type of terms lacks `field`
-    const terms = { field, size };
+    filters = resolveTimes(filters);
     const { body } = await this.client.search({
       index: this.index,
       ignore_unavailable: true,
       body: {
         query: buildQuery(filters),
         size: 0,
-        aggs: { values: { terms } },
+        aggs: aggregations({ values: { terms: { field, size } } }),
       },
     });
     const aggs = body.aggregations as unknown as
@@ -155,10 +195,14 @@ interface TermsAggregation {
   buckets: { key: string; doc_count: number | bigint }[];
 }
 
-interface StatsAggregations {
+interface SpanAggregations {
   by_severity: TermsAggregation;
+  min: { value: number | null; value_as_string?: string };
+  max: { value: number | null; value_as_string?: string };
+}
+
+interface HistogramAggregations {
   histogram: {
-    interval: string;
     buckets: {
       key_as_string: string;
       doc_count: number | bigint;

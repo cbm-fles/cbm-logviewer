@@ -4,6 +4,7 @@ import {
   type StatsRequest,
   fields,
 } from "@cbm-logviewer/shared";
+import fastifyCompress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
 import type { Client } from "@opensearch-project/opensearch";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
@@ -34,6 +35,13 @@ export function buildApp(
   });
   const search = new Search(client, config.index);
 
+  // a query returns up to some 30 MB of JSON, which gzip reduces to a seventh;
+  // level 1 is much faster than the default and compresses almost as well
+  app.register(fastifyCompress, {
+    encodings: ["gzip"],
+    zlibOptions: { level: 1 },
+  });
+
   app.setErrorHandler((err: FastifyError, req, reply) => {
     if (err instanceof FilterError) {
       return reply.code(400).send({ error: err.message });
@@ -45,58 +53,62 @@ export function buildApp(
     return reply.code(502).send({ error: "OpenSearch request failed" });
   });
 
-  app.get("/api/status", async (): Promise<Status> => {
-    try {
-      const { body } = await client.cluster.health({ timeout: "5s" });
-      return {
-        opensearch: "ok",
-        cluster_status: body.status,
-        index: config.index,
-      };
-    } catch (err) {
-      app.log.warn({ err }, "OpenSearch is not available");
-      return { opensearch: "unavailable", index: config.index };
-    }
-  });
+  // in a plugin, as the hooks of compression apply only to the routes that
+  // are registered after it
+  app.register(async (api) => {
+    api.get("/api/status", async (): Promise<Status> => {
+      try {
+        const { body } = await client.cluster.health({ timeout: "5s" });
+        return {
+          opensearch: "ok",
+          cluster_status: body.status,
+          index: config.index,
+        };
+      } catch (err) {
+        api.log.warn({ err }, "OpenSearch is not available");
+        return { opensearch: "unavailable", index: config.index };
+      }
+    });
 
-  app.get("/api/fields", async () => fields);
+    api.get("/api/fields", async () => fields);
 
-  app.post<{ Body: QueryRequest }>(
-    "/api/query",
-    { schema: { body: queryBodySchema } },
-    async (req) => search.query(req.body),
-  );
+    api.post<{ Body: QueryRequest }>(
+      "/api/query",
+      { schema: { body: queryBodySchema } },
+      async (req) => search.query(req.body),
+    );
 
-  app.post<{ Body: StatsRequest }>(
-    "/api/stats",
-    { schema: { body: statsBodySchema } },
-    async (req) => search.stats(req.body),
-  );
+    api.post<{ Body: StatsRequest }>(
+      "/api/stats",
+      { schema: { body: statsBodySchema } },
+      async (req) => search.stats(req.body),
+    );
 
-  app.get<{ Params: { field: string }; Querystring: Filters }>(
-    "/api/values/:field",
-    {
-      schema: {
-        params: {
-          type: "object",
-          properties: { field: { enum: keywordFields } },
-        },
-        querystring: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            from: { type: "string", maxLength: 100 },
-            to: { type: "string", maxLength: 100 },
+    api.get<{ Params: { field: string }; Querystring: Filters }>(
+      "/api/values/:field",
+      {
+        schema: {
+          params: {
+            type: "object",
+            properties: { field: { enum: keywordFields } },
+          },
+          querystring: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              from: { type: "string", maxLength: 100 },
+              to: { type: "string", maxLength: 100 },
+            },
           },
         },
       },
-    },
-    async (req) =>
-      search.values(req.params.field, {
-        from: req.query.from ?? "now-7d",
-        ...(req.query.to !== undefined && { to: req.query.to }),
-      }),
-  );
+      async (req) =>
+        search.values(req.params.field, {
+          from: req.query.from ?? "now-7d",
+          ...(req.query.to !== undefined && { to: req.query.to }),
+        }),
+    );
+  });
 
   if (config.webRoot) {
     app.register(fastifyStatic, { root: config.webRoot });

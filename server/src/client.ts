@@ -9,7 +9,5 @@ export function createClient(config: Config): Client {
       password: config.opensearchPassword,
     },
     ssl: { rejectUnauthorized: config.opensearchVerifyTls },
-    // the sort values of date_nanos fields are beyond 2^53
-    enableLongNumeralSupport: true,
   });
 }

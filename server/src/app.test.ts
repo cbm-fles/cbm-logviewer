@@ -70,3 +70,21 @@ describe("request validation", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe("compression", () => {
+  it("compresses large responses", async () => {
+    const app = buildApp(
+      config,
+      fakeClient(async () => ({})),
+      {
+        logger: false,
+      },
+    );
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/fields",
+      headers: { "accept-encoding": "gzip, br" },
+    });
+    expect(res.headers["content-encoding"]).toBe("gzip");
+  });
+});

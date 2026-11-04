@@ -48,8 +48,13 @@ The filters and the responses are defined in
 }
 ```
 
+Times are ISO timestamps or `now`, `now-<n><unit>` with the units `ms`, `s`,
+`m`, `h`, `d` and `w`; the server resolves them once per request.
+
 The server sorts the messages by `@timestamp`, `_index` and `_seq_no`, which
-is unique as the log indices have one shard each.
+is unique as the log indices have one shard each. Numbers in `data` beyond
+2^53 lose precision, as parsing them exactly makes queries several times
+slower; `data_text` keeps them exactly.
 
 ## Configuration
 
