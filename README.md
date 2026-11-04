@@ -142,4 +142,6 @@ docker run --rm -p 127.0.0.1:5602:5602 -e OPENSEARCH_PASSWORD=... \
   -e OPENSEARCH_URL=https://opensearch:9200 cbm-logviewer
 ```
 
-CI publishes the image of `main` as `ghcr.io/cbm-fles/cbm-logviewer:latest`.
+CI publishes the image of `main` as `ghcr.io/cbm-fles/cbm-logviewer:latest`,
+and as `ghcr.io/cbm-fles/cbm-logviewer:COMMIT` with the full commit hash.
+flesnet's `contrib/loggingstack` runs it next to OpenSearch.

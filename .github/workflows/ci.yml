@@ -57,4 +57,7 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name == 'push' }}
-          tags: ghcr.io/${{ github.repository }}:latest
+          # latest, and the commit, to go back to
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
