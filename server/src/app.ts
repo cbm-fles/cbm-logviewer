@@ -1,7 +1,16 @@
+import {
+  type Filters,
+  type QueryRequest,
+  type StatsRequest,
+  fields,
+} from "@cbm-logviewer/shared";
 import fastifyStatic from "@fastify/static";
 import type { Client } from "@opensearch-project/opensearch";
-import Fastify, { type FastifyServerOptions } from "fastify";
+import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import type { Config } from "./config.js";
+import { FilterError } from "./dsl.js";
+import { queryBodySchema, statsBodySchema } from "./schemas.js";
+import { Search } from "./search.js";
 
 export interface Status {
   opensearch: "ok" | "unavailable";
@@ -9,12 +18,32 @@ export interface Status {
   index: string;
 }
 
+const keywordFields = fields
+  .filter((f) => f.type === "keyword")
+  .map((f) => f.name);
+
 export function buildApp(
   config: Config,
   client: Client,
   options: FastifyServerOptions = { logger: true },
 ) {
-  const app = Fastify(options);
+  // reject unknown properties instead of dropping them
+  const app = Fastify({
+    ...options,
+    ajv: { customOptions: { removeAdditional: false } },
+  });
+  const search = new Search(client, config.index);
+
+  app.setErrorHandler((err: FastifyError, req, reply) => {
+    if (err instanceof FilterError) {
+      return reply.code(400).send({ error: err.message });
+    }
+    if (err.validation) {
+      return reply.code(400).send({ error: err.message });
+    }
+    req.log.error({ err }, "request failed");
+    return reply.code(502).send({ error: "OpenSearch request failed" });
+  });
 
   app.get("/api/status", async (): Promise<Status> => {
     try {
@@ -29,6 +58,45 @@ export function buildApp(
       return { opensearch: "unavailable", index: config.index };
     }
   });
+
+  app.get("/api/fields", async () => fields);
+
+  app.post<{ Body: QueryRequest }>(
+    "/api/query",
+    { schema: { body: queryBodySchema } },
+    async (req) => search.query(req.body),
+  );
+
+  app.post<{ Body: StatsRequest }>(
+    "/api/stats",
+    { schema: { body: statsBodySchema } },
+    async (req) => search.stats(req.body),
+  );
+
+  app.get<{ Params: { field: string }; Querystring: Filters }>(
+    "/api/values/:field",
+    {
+      schema: {
+        params: {
+          type: "object",
+          properties: { field: { enum: keywordFields } },
+        },
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            from: { type: "string", maxLength: 100 },
+            to: { type: "string", maxLength: 100 },
+          },
+        },
+      },
+    },
+    async (req) =>
+      search.values(req.params.field, {
+        from: req.query.from ?? "now-7d",
+        ...(req.query.to !== undefined && { to: req.query.to }),
+      }),
+  );
 
   if (config.webRoot) {
     app.register(fastifyStatic, { root: config.webRoot });

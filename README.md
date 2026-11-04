@@ -20,6 +20,37 @@ The repository has three npm workspaces:
 | `server/` | the server: Fastify, queries OpenSearch as a read-only user |
 | `web/`    | the frontend: React, built with Vite                        |
 
+## API
+
+| Request                 |                                                                            |
+| ----------------------- | -------------------------------------------------------------------------- |
+| `GET /api/status`       | whether OpenSearch is available                                            |
+| `GET /api/fields`       | the fields of the messages                                                 |
+| `POST /api/query`       | the newest `limit` messages that pass `filters`, the oldest first          |
+| `POST /api/stats`       | the number of messages per severity and over time                          |
+| `GET /api/values/FIELD` | the most frequent values of a keyword field, by default of the last 7 days |
+
+The filters and the responses are defined in
+[shared/src/query.ts](shared/src/query.ts), e.g.:
+
+```json
+{
+  "filters": {
+    "from": "now-1h",
+    "severities": [13, 17, 21],
+    "fields": {
+      "host": { "match": ["node1*"] },
+      "service": { "exclude": ["tsclient"] },
+      "message": { "match": ["build timeout"] }
+    }
+  },
+  "limit": 10000
+}
+```
+
+The server sorts the messages by `@timestamp`, `_index` and `_seq_no`, which
+is unique as the log indices have one shard each.
+
 ## Configuration
 
 The server reads its settings from the environment:
@@ -44,6 +75,13 @@ npm install
 npm run build
 npm test
 npm run lint
+
+# with the tests against OpenSearch, here in a container without security
+docker run -d --name logviewer-opensearch -p 127.0.0.1:9201:9200 \
+  -e discovery.type=single-node -e DISABLE_SECURITY_PLUGIN=true \
+  -e DISABLE_INSTALL_DEMO_CONFIG=true \
+  docker.io/opensearchproject/opensearch:3.9.0
+OPENSEARCH_TEST_URL=http://localhost:9201 npm test
 
 # server and frontend with reloading, the frontend on http://localhost:5173
 OPENSEARCH_PASSWORD=... npm run dev:server

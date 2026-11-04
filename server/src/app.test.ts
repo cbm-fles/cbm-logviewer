@@ -36,3 +36,37 @@ describe("GET /api/status", () => {
     expect(res.json()).toMatchObject({ opensearch: "unavailable" });
   });
 });
+
+describe("request validation", () => {
+  const app = buildApp(
+    config,
+    fakeClient(async () => ({})),
+    { logger: false },
+  );
+
+  it.each([
+    ["no limit", { filters: {} }],
+    ["a limit too large", { filters: {}, limit: 1000000 }],
+    [
+      "an unknown field",
+      { filters: { fields: { nofield: { match: ["x"] } } }, limit: 10 },
+    ],
+    ["an unknown severity", { filters: { severities: [12] }, limit: 10 }],
+    [
+      "a non-integer pid",
+      { filters: { fields: { pid: { match: ["12*"] } } }, limit: 10 },
+    ],
+  ])("rejects a query with %s", async (_, payload) => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/query",
+      payload,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects values of a non-keyword field", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/values/message" });
+    expect(res.statusCode).toBe(400);
+  });
+});
