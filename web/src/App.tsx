@@ -1,30 +1,41 @@
 import {
-  type Filters,
   type LiveEvent,
   type LogMessage,
+  fields,
   severities,
 } from "@cbm-logviewer/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { LiveConnection, type LiveState, query } from "./api";
-import { LogTable, defaultVisibility } from "./LogTable";
+import { CellMenu, type CellMenuState } from "./CellMenu";
+import { fileName, save, toCsv, toJson } from "./download";
+import {
+  type FieldInput,
+  type Mode,
+  type View,
+  addPattern,
+  isFilterField,
+  literalPattern,
+  liveFilters,
+  queryFilters,
+  viewFromSearch,
+  viewToSearch,
+} from "./filters";
+import { Inspector } from "./Inspector";
+import { LogTable, cellText, defaultVisibility } from "./LogTable";
 import { mergeNewest } from "./merge";
 import { useSettings } from "./settings";
-import { type Mode, type RangeId, Toolbar, ranges } from "./Toolbar";
-
-// all but TRACE and DEBUG
-const defaultSeverities = severities
-  .filter((s) => s.code >= 9)
-  .map((s) => s.code);
+import { Toolbar } from "./Toolbar";
 
 interface QueryStatus {
   total: number;
   tookMs: number;
-}
-
-// a datetime-local value, which is local time, as ISO
-function localToIso(value: string): string | undefined {
-  const d = new Date(value);
-  return value && !Number.isNaN(d.getTime()) ? d.toISOString() : undefined;
 }
 
 export function App() {
@@ -34,12 +45,14 @@ export function App() {
     utc: false,
     limit: 10000,
   });
-  const [mode, setMode] = useState<Mode>("query");
-  const [range, setRange] = useState<RangeId>("1h");
-  const [custom, setCustom] = useState({ from: "", to: "" });
-  const [selected, setSelected] = useState(defaultSeverities);
+  // what is entered; it applies at once, except the text of filters and a
+  // custom time range, which apply with Enter or Run
+  const [view, setView] = useState<View>(() => viewFromSearch(location.search));
+  const mode = view.mode;
   const [messages, setMessages] = useState<LogMessage[]>([]);
   const [error, setError] = useState<string>();
+  const [selected, setSelected] = useState<LogMessage>();
+  const [menu, setMenu] = useState<CellMenuState>();
 
   const [loading, setLoading] = useState(false);
   const [queryStatus, setQueryStatus] = useState<QueryStatus>();
@@ -50,38 +63,73 @@ export function App() {
   const [dropped, setDropped] = useState(0);
   const [pending, setPending] = useState<LogMessage[]>([]);
   const live = useRef<LiveConnection>(undefined);
+  const liveRequest = useRef<ReturnType<typeof liveFilters>>({});
 
   const limit = settings.limit;
-  const severityFilter = useMemo(
-    () =>
-      selected.length === severities.length ? {} : { severities: selected },
-    [selected],
+
+  const runQuery = useCallback(
+    async (v: View) => {
+      abort.current?.abort();
+      const controller = new AbortController();
+      abort.current = controller;
+      setLoading(true);
+      setError(undefined);
+      try {
+        const res = await query(
+          { filters: queryFilters(v), limit },
+          controller.signal,
+        );
+        setMessages(res.messages);
+        setQueryStatus({ total: res.total, tookMs: res.took_ms });
+      } catch (err) {
+        if (!controller.signal.aborted) setError((err as Error).message);
+      } finally {
+        if (abort.current === controller) setLoading(false);
+      }
+    },
+    [limit],
   );
 
-  const runQuery = useCallback(async () => {
-    abort.current?.abort();
-    const controller = new AbortController();
-    abort.current = controller;
-    const preset = ranges.find((r) => r.id === range);
-    const from = preset?.from ?? localToIso(custom.from);
-    const to = range === "custom" ? localToIso(custom.to) : undefined;
-    const filters: Filters = {
-      ...severityFilter,
-      ...(from !== undefined && { from }),
-      ...(to !== undefined && { to }),
-    };
-    setLoading(true);
-    setError(undefined);
-    try {
-      const res = await query({ filters, limit }, controller.signal);
-      setMessages(res.messages);
-      setQueryStatus({ total: res.total, tookMs: res.took_ms });
-    } catch (err) {
-      if (!controller.signal.aborted) setError((err as Error).message);
-    } finally {
-      if (abort.current === controller) setLoading(false);
+  // Applies a view: in the URL, and in a query or the live mode.
+  const apply = (v: View) => {
+    history.replaceState(null, "", viewToSearch(v) || location.pathname);
+    if (v.mode === "query") {
+      void runQuery(v);
+    } else {
+      liveRequest.current = liveFilters(v);
+      live.current?.send({ type: "start", filters: liveRequest.current });
     }
-  }, [range, custom, severityFilter, limit]);
+  };
+
+  const changeView = (change: Partial<View>) => {
+    const v = { ...view, ...change };
+    setView(v);
+    const immediate =
+      change.severities !== undefined ||
+      (change.range !== undefined && change.range !== "custom");
+    if (immediate) apply(v);
+  };
+
+  const filterOn = (
+    field: string,
+    value: string,
+    kind: "match" | "exclude",
+  ) => {
+    if (!isFilterField(field)) return;
+    const input = view.fields[field] ?? { match: "", exclude: "" };
+    const v = {
+      ...view,
+      fields: {
+        ...view.fields,
+        [field]: {
+          ...input,
+          [kind]: addPattern(input[kind], literalPattern(value)),
+        },
+      },
+    };
+    setView(v);
+    apply(v);
+  };
 
   // the live mode; the refs let the connection's callback see current values
   const pausedRef = useRef(paused);
@@ -104,16 +152,13 @@ export function App() {
     if (mode !== "live") return;
     const connection = new LiveConnection(onLiveEvent, setLiveState);
     live.current = connection;
+    connection.send({ type: "start", filters: liveRequest.current });
     return () => {
       connection.close();
       live.current = undefined;
       setLiveState("closed");
     };
   }, [mode, onLiveEvent]);
-
-  useEffect(() => {
-    live.current?.send({ type: "start", filters: severityFilter });
-  }, [mode, severityFilter]);
 
   const changeMode = (m: Mode) => {
     if (m === mode) return;
@@ -125,7 +170,9 @@ export function App() {
     setPaused(false);
     setError(undefined);
     setQueryStatus(undefined);
-    setMode(m);
+    const v = { ...view, mode: m };
+    setView(v);
+    apply(v);
   };
 
   const pause = (p: boolean) => {
@@ -136,29 +183,72 @@ export function App() {
     setPaused(p);
   };
 
-  // a first query when the page opens
+  const visibleColumns = fields.filter(
+    (f) => settings.columnVisibility[f.name] !== false,
+  );
+  const download = (format: "json" | "csv") => {
+    if (format === "json") {
+      save(toJson(messages), "application/x-ndjson", fileName("jsonl"));
+    } else {
+      const columns = visibleColumns.map((f) => ({
+        id: f.name,
+        label: f.label,
+      }));
+      save(
+        toCsv(messages, columns, (m, field) =>
+          cellText(m, field, settings.utc),
+        ),
+        "text/csv",
+        fileName("csv"),
+      );
+    }
+  };
+
+  const openMenu = (e: MouseEvent, m: LogMessage, field: string) => {
+    e.preventDefault();
+    const label = fields.find((f) => f.name === field)?.label ?? field;
+    const raw = (m as unknown as Record<string, unknown>)[field];
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      field,
+      label,
+      value:
+        field === "@timestamp"
+          ? m["@timestamp"]
+          : cellText(m, field, settings.utc),
+      filter: isFilterField(field) && raw !== undefined && raw !== null,
+    });
+  };
+  const closeMenu = useCallback(() => setMenu(undefined), []);
+
+  // the view of the URL when the page opens
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    void runQuery();
-  }, [runQuery]);
+    apply(view);
+  });
+
+  const hasFieldFilters = Object.values(view.fields).some(
+    (f) => f.match.trim() || f.exclude.trim(),
+  );
 
   return (
     <div className="app">
       <Toolbar
-        mode={mode}
+        view={view}
+        onView={changeView}
         onMode={changeMode}
-        range={range}
-        onRange={setRange}
-        customFrom={custom.from}
-        customTo={custom.to}
-        onCustom={(from, to) => setCustom({ from, to })}
-        selected={selected}
-        onSelected={setSelected}
+        hasFieldFilters={hasFieldFilters}
+        onClearFilters={() => {
+          const v = { ...view, fields: {} };
+          setView(v);
+          apply(v);
+        }}
         limit={limit}
         onLimit={(l) => updateSettings({ limit: l })}
-        onQuery={() => void runQuery()}
+        onQuery={() => apply(view)}
         loading={loading}
         paused={paused}
         onPause={pause}
@@ -167,6 +257,7 @@ export function App() {
           setPending([]);
           setDropped(0);
         }}
+        onDownload={download}
         utc={settings.utc}
         onUtc={(utc) => updateSettings({ utc })}
         columnVisibility={settings.columnVisibility}
@@ -174,16 +265,35 @@ export function App() {
           updateSettings({ columnVisibility })
         }
       />
-      <LogTable
-        messages={messages}
-        utc={settings.utc}
-        columnVisibility={settings.columnVisibility}
-        columnSizing={settings.columnSizing}
-        onColumnSizingChange={(columnSizing) =>
-          updateSettings({ columnSizing })
-        }
-        resetKey={mode === "live" ? mode : queryStatus}
-      />
+      <div className="main">
+        <LogTable
+          messages={messages}
+          utc={settings.utc}
+          columnVisibility={settings.columnVisibility}
+          columnSizing={settings.columnSizing}
+          onColumnSizingChange={(columnSizing) =>
+            updateSettings({ columnSizing })
+          }
+          resetKey={mode === "live" ? mode : queryStatus}
+          filters={view.fields}
+          onFilter={(field, input: FieldInput) =>
+            setView((v) => ({ ...v, fields: { ...v.fields, [field]: input } }))
+          }
+          onApply={() => apply(view)}
+          selected={selected?.id}
+          onSelect={(id) => setSelected(messages.find((m) => m.id === id))}
+          onCellMenu={openMenu}
+        />
+        {selected && (
+          <Inspector
+            message={selected}
+            utc={settings.utc}
+            onFilter={filterOn}
+            onClose={() => setSelected(undefined)}
+          />
+        )}
+      </div>
+      {menu && <CellMenu menu={menu} onFilter={filterOn} onClose={closeMenu} />}
       <StatusBar
         mode={mode}
         messages={messages}

@@ -14,8 +14,13 @@ const textFields: Record<string, string> = {
   data: "data_text",
 };
 
+// `*` and `?` are wildcards, `\*`, `\?` and `\\` stand for themselves.
 function hasWildcard(pattern: string): boolean {
-  return /[*?]/.test(pattern);
+  return /(?:^|[^\\])(?:\\\\)*[*?]/.test(pattern);
+}
+
+function unescape(pattern: string): string {
+  return pattern.replace(/\\([*?\\])/g, "$1");
 }
 
 function patternQuery(field: string, pattern: string): Query {
@@ -30,7 +35,7 @@ function patternQuery(field: string, pattern: string): Query {
             },
           },
         }
-      : { match_phrase: { [textField]: pattern } };
+      : { match_phrase: { [textField]: unescape(pattern) } };
   }
   const type = fields.find((f) => f.name === field)?.type;
   if (type === "integer") {
@@ -42,7 +47,7 @@ function patternQuery(field: string, pattern: string): Query {
   }
   return hasWildcard(pattern)
     ? { wildcard: { [field]: { value: pattern, case_insensitive: true } } }
-    : { term: { [field]: pattern } };
+    : { term: { [field]: unescape(pattern) } };
 }
 
 function anyOf(queries: Query[]): Query {

@@ -91,3 +91,36 @@ describe("buildQuery", () => {
     );
   });
 });
+
+describe("escaped wildcards", () => {
+  it("stand for themselves", () => {
+    expect(
+      buildQuery({ fields: { message: { match: ["15: \\* checked"] } } }),
+    ).toEqual({
+      bool: { filter: [{ match_phrase: { message: "15: * checked" } }] },
+    });
+    expect(buildQuery({ fields: { host: { match: ["node\\?"] } } })).toEqual({
+      bool: { filter: [{ term: { host: "node?" } }] },
+    });
+  });
+
+  it("can be mixed with wildcards", () => {
+    expect(buildQuery({ fields: { host: { match: ["a\\*b*"] } } })).toEqual({
+      bool: {
+        filter: [
+          { wildcard: { host: { value: "a\\*b*", case_insensitive: true } } },
+        ],
+      },
+    });
+  });
+
+  it("treat an escaped backslash as such", () => {
+    expect(buildQuery({ fields: { host: { match: ["a\\\\*"] } } })).toEqual({
+      bool: {
+        filter: [
+          { wildcard: { host: { value: "a\\\\*", case_insensitive: true } } },
+        ],
+      },
+    });
+  });
+});

@@ -348,3 +348,170 @@ button:disabled {
 .sev-FATAL {
   color: var(--sev-FATAL);
 }
+
+/* the filters under the column headers */
+
+.th {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 4px;
+}
+
+input.filter {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  height: 20px;
+  padding: 1px 4px;
+  font-size: 11px;
+  font-weight: normal;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+input.filter.exclude {
+  border-style: dashed;
+}
+
+input.filter:not(:placeholder-shown) {
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+input.filter.exclude:not(:placeholder-shown) {
+  border-color: var(--sev-ERROR);
+}
+
+.table:focus {
+  outline: none;
+}
+
+.tr {
+  cursor: default;
+}
+
+.tr.selected,
+.tr.selected:hover {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.tr.selected .td.sev {
+  color: inherit;
+}
+
+/* the table and the inspector beside it */
+
+.main {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main .table {
+  flex: 1;
+  min-width: 0;
+}
+
+.inspector {
+  width: 400px;
+  flex: none;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.inspector-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--toolbar);
+  border-bottom: 1px solid var(--border);
+}
+
+.inspector-head .title {
+  margin-right: auto;
+}
+
+.inspector dl {
+  margin: 0;
+  padding: 6px 12px;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--grid);
+}
+
+.field dt {
+  color: var(--muted);
+}
+
+.field dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.field-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0.3;
+}
+
+.field:hover .field-actions {
+  opacity: 1;
+}
+
+.field-actions button {
+  min-height: 0;
+  padding: 0 6px;
+  line-height: 16px;
+}
+
+.data-label {
+  padding: 6px 12px 0;
+  color: var(--muted);
+}
+
+pre.data {
+  margin: 4px 12px 12px;
+  padding: 6px 8px;
+  background: var(--toolbar);
+  border-radius: 4px;
+  overflow: auto;
+}
+
+/* menus */
+
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.menu-item:hover,
+.menu-item:focus {
+  background: var(--hover);
+}
+
+.cell-menu {
+  position: fixed;
+  z-index: 20;
+  padding: 4px;
+  min-width: 200px;
+}

@@ -2,33 +2,17 @@
 
 import { fields, severities } from "@cbm-logviewer/shared";
 import type { VisibilityState } from "@tanstack/react-table";
-import { useEffect, useRef, useState } from "react";
-
-export type Mode = "query" | "live";
-
-export const ranges = [
-  { id: "15m", label: "15 min", from: "now-15m" },
-  { id: "1h", label: "1 hour", from: "now-1h" },
-  { id: "6h", label: "6 hours", from: "now-6h" },
-  { id: "24h", label: "24 hours", from: "now-24h" },
-  { id: "7d", label: "7 days", from: "now-7d" },
-  { id: "custom", label: "Custom", from: undefined },
-] as const;
-
-export type RangeId = (typeof ranges)[number]["id"];
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type Mode, type RangeId, type View, ranges } from "./filters";
 
 export const limits = [1000, 10000, 100000];
 
 interface Props {
-  mode: Mode;
+  view: View;
+  onView: (change: Partial<View>) => void;
   onMode: (mode: Mode) => void;
-  range: RangeId;
-  onRange: (range: RangeId) => void;
-  customFrom: string;
-  customTo: string;
-  onCustom: (from: string, to: string) => void;
-  selected: number[];
-  onSelected: (codes: number[]) => void;
+  hasFieldFilters: boolean;
+  onClearFilters: () => void;
   limit: number;
   onLimit: (limit: number) => void;
   onQuery: () => void;
@@ -36,6 +20,7 @@ interface Props {
   paused: boolean;
   onPause: (paused: boolean) => void;
   onClear: () => void;
+  onDownload: (format: "json" | "csv") => void;
   utc: boolean;
   onUtc: (utc: boolean) => void;
   columnVisibility: VisibilityState;
@@ -43,12 +28,13 @@ interface Props {
 }
 
 export function Toolbar(p: Props) {
+  const { view } = p;
   const toggle = (code: number) =>
-    p.onSelected(
-      p.selected.includes(code)
-        ? p.selected.filter((c) => c !== code)
-        : [...p.selected, code].sort((a, b) => a - b),
-    );
+    p.onView({
+      severities: view.severities.includes(code)
+        ? view.severities.filter((c) => c !== code)
+        : [...view.severities, code].sort((a, b) => a - b),
+    });
 
   return (
     <header className="toolbar">
@@ -59,8 +45,8 @@ export function Toolbar(p: Props) {
           <button
             key={m}
             type="button"
-            className={p.mode === m ? "active" : ""}
-            aria-pressed={p.mode === m}
+            className={view.mode === m ? "active" : ""}
+            aria-pressed={view.mode === m}
             onClick={() => p.onMode(m)}
           >
             {m === "query" ? "Query" : "Live"}
@@ -68,12 +54,12 @@ export function Toolbar(p: Props) {
         ))}
       </div>
 
-      {p.mode === "query" && (
+      {view.mode === "query" && (
         <div className="group">
           <select
             aria-label="Time range"
-            value={p.range}
-            onChange={(e) => p.onRange(e.target.value as RangeId)}
+            value={view.range}
+            onChange={(e) => p.onView({ range: e.target.value as RangeId })}
           >
             {ranges.map((r) => (
               <option key={r.id} value={r.id}>
@@ -81,22 +67,22 @@ export function Toolbar(p: Props) {
               </option>
             ))}
           </select>
-          {p.range === "custom" && (
+          {view.range === "custom" && (
             <>
               <input
                 type="datetime-local"
                 step="1"
                 aria-label="From"
-                value={p.customFrom}
-                onChange={(e) => p.onCustom(e.target.value, p.customTo)}
+                value={view.customFrom}
+                onChange={(e) => p.onView({ customFrom: e.target.value })}
               />
               <span className="muted">to</span>
               <input
                 type="datetime-local"
                 step="1"
                 aria-label="To"
-                value={p.customTo}
-                onChange={(e) => p.onCustom(p.customFrom, e.target.value)}
+                value={view.customTo}
+                onChange={(e) => p.onView({ customTo: e.target.value })}
               />
             </>
           )}
@@ -108,8 +94,8 @@ export function Toolbar(p: Props) {
           <button
             key={s.code}
             type="button"
-            className={`sev-toggle sev-${s.text}${p.selected.includes(s.code) ? " on" : ""}`}
-            aria-pressed={p.selected.includes(s.code)}
+            className={`sev-toggle sev-${s.text}${view.severities.includes(s.code) ? " on" : ""}`}
+            aria-pressed={view.severities.includes(s.code)}
             title={`${s.text} (${s.level})`}
             onClick={() => toggle(s.code)}
           >
@@ -120,7 +106,9 @@ export function Toolbar(p: Props) {
 
       <div className="group">
         <select
-          aria-label={p.mode === "query" ? "Maximum messages" : "Messages kept"}
+          aria-label={
+            view.mode === "query" ? "Maximum messages" : "Messages kept"
+          }
           value={p.limit}
           onChange={(e) => p.onLimit(Number(e.target.value))}
         >
@@ -130,7 +118,7 @@ export function Toolbar(p: Props) {
             </option>
           ))}
         </select>
-        {p.mode === "query" ? (
+        {view.mode === "query" ? (
           <button
             type="button"
             className="primary"
@@ -153,6 +141,11 @@ export function Toolbar(p: Props) {
             </button>
           </>
         )}
+        {p.hasFieldFilters && (
+          <button type="button" onClick={p.onClearFilters}>
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div className="group end">
@@ -164,21 +157,63 @@ export function Toolbar(p: Props) {
           />
           UTC
         </label>
-        <ColumnMenu
-          visibility={p.columnVisibility}
-          onChange={p.onColumnVisibility}
-        />
+        <Menu label="Download">
+          {(close) => (
+            <>
+              {(["json", "csv"] as const).map((format) => (
+                <button
+                  key={format}
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={() => {
+                    p.onDownload(format);
+                    close();
+                  }}
+                >
+                  {format === "json"
+                    ? "JSON, all fields"
+                    : "CSV, the visible columns"}
+                </button>
+              ))}
+            </>
+          )}
+        </Menu>
+        <Menu label="Columns">
+          {() =>
+            fields.map((f) => (
+              <label
+                key={f.name}
+                className="check"
+                role="menuitemcheckbox"
+                aria-checked={p.columnVisibility[f.name] !== false}
+              >
+                <input
+                  type="checkbox"
+                  checked={p.columnVisibility[f.name] !== false}
+                  onChange={(e) =>
+                    p.onColumnVisibility({
+                      ...p.columnVisibility,
+                      [f.name]: e.target.checked,
+                    })
+                  }
+                />
+                {f.label}
+              </label>
+            ))
+          }
+        </Menu>
       </div>
     </header>
   );
 }
 
-function ColumnMenu({
-  visibility,
-  onChange,
+function Menu({
+  label,
+  children,
 }: {
-  visibility: VisibilityState;
-  onChange: (v: VisibilityState) => void;
+  label: string;
+  children: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -194,27 +229,11 @@ function ColumnMenu({
   return (
     <div className="menu" ref={ref}>
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
-        Columns
+        {label}
       </button>
       {open && (
         <div className="menu-list" role="menu">
-          {fields.map((f) => (
-            <label
-              key={f.name}
-              className="check"
-              role="menuitemcheckbox"
-              aria-checked={visibility[f.name] !== false}
-            >
-              <input
-                type="checkbox"
-                checked={visibility[f.name] !== false}
-                onChange={(e) =>
-                  onChange({ ...visibility, [f.name]: e.target.checked })
-                }
-              />
-              {f.label}
-            </label>
-          ))}
+          {children(() => setOpen(false))}
         </div>
       )}
     </div>
