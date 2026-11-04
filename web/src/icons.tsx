@@ -5,7 +5,6 @@ const paths: Record<string, string> = {
   exclude: "M8 2.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11M4.1 4.1l7.8 7.8",
   clear: "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4",
   copy: "M5.5 5.5h7v8h-7zM3.5 10.5v-8h7",
-  inspect: "M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9M10.3 10.3l3.2 3.2",
 };
 
 export type IconName = keyof typeof paths;

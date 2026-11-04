@@ -12,7 +12,8 @@ interface Props {
   // the number of filters of the columns
   filterCount: number;
   onClearFilters: () => void;
-  onEditFilters: () => void;
+  filtersOpen: boolean;
+  onFiltersOpen: (open: boolean) => void;
   onQuery: () => void;
   loading: boolean;
   paused: boolean;
@@ -103,25 +104,25 @@ export function Toolbar(p: Props) {
       </div>
 
       <div className="group">
-        {view.mode === "query" ? (
-          <button
-            type="button"
-            className="primary"
-            onClick={p.onQuery}
-            disabled={p.loading}
-          >
-            {p.loading ? "Running…" : "Run"}
-          </button>
-        ) : (
+        <button
+          type="button"
+          className="primary"
+          title="Apply the filters and the time range as entered"
+          onClick={p.onQuery}
+          disabled={p.loading}
+        >
+          {p.loading ? "Applying…" : "Apply"}
+        </button>
+        {view.mode === "live" && (
           <>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => p.onPause(!p.paused)}
-            >
+            <button type="button" onClick={() => p.onPause(!p.paused)}>
               {p.paused ? "Resume" : "Pause"}
             </button>
-            <button type="button" onClick={p.onClear}>
+            <button
+              type="button"
+              title="Remove the messages shown"
+              onClick={p.onClear}
+            >
               Clear
             </button>
           </>
@@ -129,22 +130,26 @@ export function Toolbar(p: Props) {
       </div>
 
       <div className="group filters-summary">
-        {p.filterCount > 0 ? (
-          <>
-            <span className="filter-count">
-              {p.filterCount} {p.filterCount === 1 ? "filter" : "filters"}{" "}
-              active
-            </span>
-            <button type="button" onClick={p.onEditFilters}>
-              Edit
-            </button>
-            <button type="button" onClick={p.onClearFilters}>
-              Clear filters
-            </button>
-          </>
-        ) : (
-          <button type="button" onClick={p.onEditFilters}>
-            Filters
+        <button
+          type="button"
+          className={`filters-toggle${p.filterCount > 0 ? " has-filters" : ""}${p.filtersOpen ? " active" : ""}`}
+          aria-pressed={p.filtersOpen}
+          title={p.filtersOpen ? "Close the filters" : "Show all filters"}
+          onClick={() => p.onFiltersOpen(!p.filtersOpen)}
+        >
+          {p.filterCount === 0
+            ? "Filters"
+            : `${p.filterCount} ${p.filterCount === 1 ? "filter" : "filters"} active`}
+        </button>
+        {p.filterCount > 0 && (
+          <button
+            type="button"
+            aria-label={
+              p.filterCount === 1 ? "Clear the filter" : "Clear all filters"
+            }
+            onClick={p.onClearFilters}
+          >
+            {p.filterCount === 1 ? "Clear" : "Clear all"}
           </button>
         )}
       </div>

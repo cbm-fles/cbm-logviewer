@@ -21,7 +21,7 @@ test("shows the messages of the last hour, without debug", async ({ page }) => {
 test("filters by severity", async ({ page }) => {
   await page.getByRole("button", { name: "INFO", exact: true }).click();
   await page.getByRole("button", { name: "DEBUG", exact: true }).click();
-  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page.getByText("7 of 47 messages match")).toBeVisible();
   await expect(
     page.getByRole("cell", { name: "status 1", exact: true }),
@@ -67,7 +67,9 @@ test("shows new messages in live mode", async ({ page }) => {
 
 test("applies filters in live mode to the messages shown", async ({ page }) => {
   await page.getByRole("button", { name: "Live", exact: true }).click();
-  await expect(page.locator(".state")).toHaveText(/^Live · \d+ messages/);
+  await expect(page.locator(".state")).toHaveText(
+    /^Live · \d+ (of \d+ )?messages since/,
+  );
   await expect(
     page.getByRole("cell", { name: "second warning" }),
   ).toBeVisible();
@@ -131,4 +133,20 @@ test("resizes and moves columns", async ({ page }) => {
     "aria-label",
     "Time",
   );
+});
+
+test("shows a long value in the menu on several lines", async ({ page }) => {
+  await page.getByRole("button", { name: "Live", exact: true }).click();
+  await expect(page.locator(".state")).toHaveText(/^Live · /);
+  const long = "a long message " + "with many words ".repeat(20);
+  await write(message(long, [13, "WARN"], 0));
+  await page
+    .getByRole("cell", { name: long.trim() })
+    .click({ button: "right" });
+  const value = page.locator(".cell-menu-value");
+  const box = (await value.boundingBox())!;
+  expect(box.width).toBeLessThanOrEqual(240);
+  expect(box.height).toBeGreaterThan(40);
+  const menu = (await page.locator(".cell-menu").boundingBox())!;
+  expect(menu.y + menu.height).toBeLessThanOrEqual(page.viewportSize()!.height);
 });

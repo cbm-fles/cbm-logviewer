@@ -1,14 +1,12 @@
 // The menu of a cell, on a right click: filter on its value, clear the filter
-// of its column, copy the value or show the message in the inspector.
+// of its column or copy the value.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { type IconName, Icon } from "./icons";
 
 export interface CellMenuState {
   x: number;
   y: number;
-  // the message
-  id: string;
   field: string;
   label: string;
   value: string;
@@ -23,21 +21,20 @@ interface Props {
   menu: CellMenuState;
   onFilter: (field: string, value: string, kind: "match" | "exclude") => void;
   onClearFilter: (field: string) => void;
-  onInspect: (id: string) => void;
   onClose: () => void;
 }
 
 // the width of the menu, see .cell-menu
 const menuWidth = 240;
 
-export function CellMenu({
-  menu,
-  onFilter,
-  onClearFilter,
-  onInspect,
-  onClose,
-}: Props) {
+export function CellMenu({ menu, onFilter, onClearFilter, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  // inside the window, also when a long value makes it high
+  const [top, setTop] = useState(menu.y);
+  useLayoutEffect(() => {
+    const height = ref.current?.offsetHeight ?? 0;
+    setTop(Math.max(4, Math.min(menu.y, window.innerHeight - height - 4)));
+  }, [menu]);
   useEffect(() => {
     const close = (e: Event) => {
       if (!ref.current?.contains(e.target as Node)) onClose();
@@ -78,10 +75,9 @@ export function CellMenu({
     </button>
   );
 
-  // inside the window
   const style = {
     left: Math.max(0, Math.min(menu.x, window.innerWidth - menuWidth - 8)),
-    top: Math.max(0, Math.min(menu.y, window.innerHeight - 260)),
+    top,
   };
 
   return (
@@ -94,9 +90,7 @@ export function CellMenu({
     >
       <div className="cell-menu-head">
         <div className="cell-menu-label">{menu.label}</div>
-        <div className="cell-menu-value" title={menu.value}>
-          {menu.value || "(empty)"}
-        </div>
+        <div className="cell-menu-value">{menu.value || "(empty)"}</div>
       </div>
       {menu.filterable && (
         <>
@@ -120,10 +114,16 @@ export function CellMenu({
           )}
         </>
       )}
-      {item("copy", "Copy", () => {
-        void navigator.clipboard?.writeText(menu.value).catch(() => undefined);
-      })}
-      {item("inspect", "Inspect", () => onInspect(menu.id))}
+      {item(
+        "copy",
+        "Copy",
+        () => {
+          void navigator.clipboard
+            ?.writeText(menu.value)
+            .catch(() => undefined);
+        },
+        menu.value !== "",
+      )}
     </div>
   );
 }

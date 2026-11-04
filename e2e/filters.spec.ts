@@ -29,7 +29,7 @@ test("filters by match and exclude, applied with Enter", async ({ page }) => {
   await expect(status(page)).toHaveText(/^1 of 47 messages match/);
   await expect(page.getByLabel("Match message")).toHaveValue("warning");
 
-  await page.getByRole("button", { name: "Clear filters" }).click();
+  await page.getByRole("button", { name: "Clear all filters" }).click();
   await expect(status(page)).toHaveText(/^42 of 47 messages match/);
   expect(new URL(page.url()).search).toBe("");
 });
@@ -145,7 +145,7 @@ test("shows and filters the instance, which not all messages have", async ({
     .getByRole("cell")
     .nth(4)
     .click({ button: "right" });
-  await expect(page.getByRole("menuitem", { name: "Copy" })).toBeEnabled();
+  await expect(page.getByRole("menuitem", { name: "Copy" })).toBeDisabled();
   await expect(
     page.getByRole("menuitem", { name: "Match", exact: true }),
   ).toBeDisabled();
@@ -165,28 +165,21 @@ test("closes the inspector when its message is filtered out", async ({
   await expect(inspector).toHaveCount(0);
 });
 
-test("shows the message of a cell in the inspector from its menu", async ({
-  page,
-}) => {
-  await page.getByRole("cell", { name: "status 3", exact: true }).click({
-    button: "right",
-  });
-  await page.getByRole("menuitem", { name: "Inspect" }).click();
-  await expect(
-    page.getByRole("complementary", { name: "Message" }),
-  ).toContainText("status 3");
-});
-
 test("lists all filters in a panel, also of hidden columns", async ({
   page,
 }) => {
-  await expect(page.getByRole("button", { name: "Filters" })).toBeVisible();
+  const toggle = page.locator(".filters-toggle");
+  await expect(toggle).toHaveText("Filters");
   await page.getByLabel("Match host").fill("node0*");
   await page.getByLabel("Match host").press("Enter");
-  await expect(page.locator(".filter-count")).toHaveText("1 filter active");
+  await expect(toggle).toHaveText("1 filter active");
+  await expect(
+    page.getByRole("button", { name: "Clear the filter" }),
+  ).toHaveText("Clear");
 
   // a filter of a hidden column, from the panel
-  await page.getByRole("button", { name: "Edit" }).click();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
   const panel = page.getByRole("region", { name: "Filters" });
   await expect(panel.getByLabel("Match Host in all filters")).toHaveValue(
     "node0*",
@@ -195,7 +188,10 @@ test("lists all filters in a panel, also of hidden columns", async ({
   await panel.getByLabel("Exclude Message in all filters").fill("status*");
   await panel.getByRole("button", { name: "Apply" }).click();
   await expect(status(page)).toHaveText(/^2 of 47 messages match/);
-  await expect(page.locator(".filter-count")).toHaveText("2 filters active");
+  await expect(toggle).toHaveText("2 filters active");
+  await expect(
+    page.getByRole("button", { name: "Clear all filters" }),
+  ).toHaveText("Clear all");
   // the same filter under the column header
   await expect(page.getByLabel("Exclude message", { exact: true })).toHaveValue(
     "status*",
@@ -203,9 +199,15 @@ test("lists all filters in a panel, also of hidden columns", async ({
 
   await panel.getByRole("button", { name: "Clear all" }).click();
   await expect(status(page)).toHaveText(/^42 of 47 messages match/);
-  await expect(page.locator(".filter-count")).toHaveCount(0);
+  await expect(toggle).toHaveText("Filters");
   await panel.getByRole("button", { name: "Close filters" }).click();
   await expect(panel).toHaveCount(0);
+  // the button opens and closes the panel
+  await toggle.click();
+  await expect(panel).toBeVisible();
+  await toggle.click();
+  await expect(panel).toHaveCount(0);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
 });
 
 test("shows the effect and the filters in the status line", async ({

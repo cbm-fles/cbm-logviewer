@@ -506,9 +506,16 @@ input.filter.exclude:not(:placeholder-shown) {
   font-size: 11px;
 }
 
-.filter-count {
+.filters-toggle.has-filters {
   font-weight: 600;
   color: var(--accent);
+  border-color: var(--accent);
+}
+
+.filters-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .inspector-head {
@@ -620,9 +627,10 @@ pre.data {
 }
 
 .cell-menu-value {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 10.5em;
+  overflow-y: auto;
 }
 
 .cell-menu .menu-item {
@@ -650,8 +658,7 @@ pre.data {
   color: var(--sev-ERROR);
 }
 
-.icon-copy,
-.icon-inspect {
+.icon-copy {
   color: var(--accent);
 }
 

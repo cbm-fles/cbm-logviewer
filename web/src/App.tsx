@@ -304,7 +304,6 @@ export function App() {
     setMenu({
       x: e.clientX,
       y: e.clientY,
-      id: m.id,
       field,
       label,
       value:
@@ -349,7 +348,8 @@ export function App() {
         onMode={changeMode}
         filterCount={countFilters(applied)}
         onClearFilters={clearFilters}
-        onEditFilters={() => setFiltersOpen(true)}
+        filtersOpen={filtersOpen}
+        onFiltersOpen={setFiltersOpen}
         onQuery={() => apply(view)}
         loading={loading}
         paused={paused}
@@ -411,7 +411,6 @@ export function App() {
           menu={menu}
           onFilter={filterOn}
           onClearFilter={clearFilter}
-          onInspect={(id) => setSelected(messages.find((m) => m.id === id))}
           onClose={closeMenu}
         />
       )}

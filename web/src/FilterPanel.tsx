@@ -72,7 +72,7 @@ export function FilterPanel(p: Props) {
         Patterns are separated by commas, one of them must match. <code>*</code>{" "}
         and <code>?</code> are wildcards, <code>\*</code> and <code>\?</code>{" "}
         stand for themselves, <code>"a, b"</code> keeps a comma. In Message and
-        Data, a pattern is a phrase. Enter or Apply applies them.
+        Data, a pattern is a phrase.
       </p>
     </section>
   );
