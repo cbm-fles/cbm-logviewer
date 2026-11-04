@@ -1,0 +1,86 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1d1f21;
+  --muted: #6b7075;
+  --border: #d8dbde;
+  --toolbar: #f3f4f5;
+  --sev-TRACE: #8a8f94;
+  --sev-DEBUG: #4f6f8f;
+  --sev-INFO: #1d1f21;
+  --sev-NOTICE: #1f6f3f;
+  --sev-WARN: #b36b00;
+  --sev-ERROR: #c62828;
+  --sev-FATAL: #8e0000;
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17191b;
+    --fg: #e3e5e7;
+    --muted: #9aa0a6;
+    --border: #33373b;
+    --toolbar: #212427;
+    --sev-TRACE: #80868b;
+    --sev-DEBUG: #8fb0d0;
+    --sev-INFO: #e3e5e7;
+    --sev-NOTICE: #7fcf9a;
+    --sev-WARN: #f0b040;
+    --sev-ERROR: #ff6b6b;
+    --sev-FATAL: #ff3b3b;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--toolbar);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  font-weight: 600;
+}
+
+.severity {
+  font-weight: 600;
+}
+
+.status {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.sev-TRACE {
+  color: var(--sev-TRACE);
+}
+.sev-DEBUG {
+  color: var(--sev-DEBUG);
+}
+.sev-INFO {
+  color: var(--sev-INFO);
+}
+.sev-NOTICE {
+  color: var(--sev-NOTICE);
+}
+.sev-WARN {
+  color: var(--sev-WARN);
+}
+.sev-ERROR {
+  color: var(--sev-ERROR);
+}
+.sev-FATAL {
+  color: var(--sev-FATAL);
+}
