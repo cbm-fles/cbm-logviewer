@@ -1,6 +1,8 @@
 // The requests to the server.
 
 import type {
+  CountResponse,
+  Filters,
   LiveEvent,
   LiveRequest,
   QueryRequest,
@@ -20,6 +22,21 @@ export async function query(
   const body = (await res.json()) as QueryResponse | { error: string };
   if ("error" in body) throw new Error(body.error);
   return body;
+}
+
+export async function count(
+  filters: Filters,
+  signal?: AbortSignal,
+): Promise<number> {
+  const res = await fetch("/api/count", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ filters }),
+    ...(signal && { signal }),
+  });
+  const body = (await res.json()) as CountResponse | { error: string };
+  if ("error" in body) throw new Error(body.error);
+  return body.count;
 }
 
 export type LiveState = "connecting" | "live" | "closed";

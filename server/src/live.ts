@@ -31,6 +31,8 @@ export interface LiveOptions {
 export interface LivePoll {
   messages: LogMessage[];
   dropped: number;
+  // all messages that arrived, whether they match or not
+  arrived: number;
 }
 
 interface IndexBucket {
@@ -131,8 +133,9 @@ export class LiveTail {
       if (!seqNos) this.sent.set(h._index, (seqNos = new Set()));
       seqNos.add(h._seq_no);
     }
+    let arrived = 0;
     for (const b of this.indexBuckets(body)) {
-      this.advance(b, now, dropped > 0);
+      arrived += this.advance(b, now, dropped > 0);
     }
 
     const messages = delivered.map(toMessage);
@@ -143,25 +146,28 @@ export class LiveTail {
           ? 1
           : 0,
     );
-    return { messages, dropped };
+    return { messages, dropped, arrived };
   }
 
-  private advance(b: IndexBucket, now: number, overflow: boolean): void {
+  // Moves the checkpoint of an index, if it can, and returns by how many
+  // messages.
+  private advance(b: IndexBucket, now: number, overflow: boolean): number {
     const max = b.max_seq_no.value;
-    if (max === null) return;
+    if (max === null) return 0;
     const checkpoint = this.checkpoints.get(b.key) ?? -1;
     const complete = b.doc_count === max - checkpoint;
     if (!complete && !overflow) {
       const since = this.gapSince.get(b.key);
       if (since === undefined) {
         this.gapSince.set(b.key, now);
-        return;
+        return 0;
       }
-      if (now - since < this.gapTimeoutMs) return;
+      if (now - since < this.gapTimeoutMs) return 0;
     }
     this.checkpoints.set(b.key, max);
     this.gapSince.delete(b.key);
     this.sent.delete(b.key);
+    return max - checkpoint;
   }
 
   private sentCount(): number {

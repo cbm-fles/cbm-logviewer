@@ -320,6 +320,23 @@ button:disabled {
   color: var(--sev-ERROR);
 }
 
+.status-filters {
+  min-height: 0;
+  padding: 0 6px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  max-width: 50%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status-filters:hover {
+  text-decoration: underline;
+}
+
 .counts {
   margin-left: auto;
   display: flex;

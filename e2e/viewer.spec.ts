@@ -3,11 +3,13 @@ import { message, write } from "./opensearch.js";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText(/of [\d,]+ messages/)).toBeVisible();
+  await expect(
+    page.locator(".state").filter({ hasText: /messages/ }),
+  ).toBeVisible();
 });
 
 test("shows the messages of the last hour, without debug", async ({ page }) => {
-  await expect(page.getByText("42 of 42 messages")).toBeVisible();
+  await expect(page.getByText("42 of 47 messages match")).toBeVisible();
   await expect(
     page.getByRole("row").filter({ hasText: "second warning" }),
   ).toHaveClass(/sev-row-WARN/);
@@ -20,7 +22,7 @@ test("filters by severity", async ({ page }) => {
   await page.getByRole("button", { name: "INFO", exact: true }).click();
   await page.getByRole("button", { name: "DEBUG", exact: true }).click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(page.getByText("7 of 7 messages")).toBeVisible();
+  await expect(page.getByText("7 of 47 messages match")).toBeVisible();
   await expect(
     page.getByRole("cell", { name: "status 1", exact: true }),
   ).toHaveCount(0);
@@ -41,7 +43,9 @@ test("shows and hides columns", async ({ page }) => {
 test("shows new messages in live mode", async ({ page }) => {
   await page.getByRole("button", { name: "Live", exact: true }).click();
   // first the newest messages there are
-  await expect(page.locator(".state")).toHaveText(/^Live · 42 messages/);
+  await expect(page.locator(".state")).toHaveText(
+    /^Live · 42 of \d+ messages since [\d:]+ match/,
+  );
   await expect(page.getByRole("cell", { name: "status 39" })).toBeInViewport();
   await write(
     message("arrived live", [17, "ERROR"], 0),

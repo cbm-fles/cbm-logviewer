@@ -1,4 +1,6 @@
 import {
+  type CountRequest,
+  type CountResponse,
   type Filters,
   type QueryRequest,
   type StatsRequest,
@@ -12,7 +14,11 @@ import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import type { Config } from "./config.js";
 import { FilterError } from "./dsl.js";
 import { type LiveSocketOptions, serveLive } from "./liveSocket.js";
-import { queryBodySchema, statsBodySchema } from "./schemas.js";
+import {
+  countBodySchema,
+  queryBodySchema,
+  statsBodySchema,
+} from "./schemas.js";
 import { Search } from "./search.js";
 
 export interface Status {
@@ -85,6 +91,14 @@ export function buildApp(
       "/api/query",
       { schema: { body: queryBodySchema } },
       async (req) => search.query(req.body),
+    );
+
+    api.post<{ Body: CountRequest }>(
+      "/api/count",
+      { schema: { body: countBodySchema } },
+      async (req): Promise<CountResponse> => ({
+        count: await search.count(req.body.filters),
+      }),
     );
 
     api.post<{ Body: StatsRequest }>(

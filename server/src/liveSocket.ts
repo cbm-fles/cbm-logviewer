@@ -31,6 +31,7 @@ export function serveLive(
   let generation = 0;
   let timer: NodeJS.Timeout | undefined;
   let dropped = 0;
+  let arrived = 0;
 
   const send = (event: LiveEvent) => socket.send(JSON.stringify(event));
   const errorMessage = (err: unknown) =>
@@ -46,11 +47,13 @@ export function serveLive(
       const res = await tail.poll();
       if (gen !== generation) return;
       dropped += res.dropped;
+      arrived += res.arrived;
       if (socket.bufferedAmount > maxBufferedBytes) {
         dropped += res.messages.length;
-      } else if (res.messages.length > 0 || dropped > 0) {
-        send({ type: "messages", messages: res.messages, dropped });
+      } else if (res.messages.length > 0 || dropped > 0 || arrived > 0) {
+        send({ type: "messages", messages: res.messages, dropped, arrived });
         dropped = 0;
+        arrived = 0;
       }
     } catch (err) {
       if (gen !== generation) return;
@@ -66,6 +69,7 @@ export function serveLive(
     stop();
     const gen = generation;
     dropped = 0;
+    arrived = 0;
     try {
       const tail = new LiveTail(client, index, filters.filters, options);
       await tail.start();

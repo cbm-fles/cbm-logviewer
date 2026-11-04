@@ -72,7 +72,7 @@ describe.skipIf(!url)("live mode against OpenSearch", () => {
     await write(`${p}-oper`, message("before"));
     const tail = new LiveTail(client, `${p}-*`, {});
     await tail.start();
-    expect(await tail.poll()).toEqual({ messages: [], dropped: 0 });
+    expect(await tail.poll()).toEqual({ messages: [], dropped: 0, arrived: 0 });
 
     const t = Date.now();
     await write(
@@ -83,7 +83,7 @@ describe.skipIf(!url)("live mode against OpenSearch", () => {
     const res = await tail.poll();
     expect(texts(res.messages)).toEqual(["first", "second"]);
     expect(res.dropped).toBe(0);
-    expect(await tail.poll()).toEqual({ messages: [], dropped: 0 });
+    expect(await tail.poll()).toEqual({ messages: [], dropped: 0, arrived: 0 });
   });
 
   it("returns messages that arrive late", async () => {
@@ -109,7 +109,10 @@ describe.skipIf(!url)("live mode against OpenSearch", () => {
       message("warning", 13),
       message("status"),
     );
-    expect(texts((await tail.poll()).messages)).toEqual(["warning"]);
+    const res = await tail.poll();
+    expect(texts(res.messages)).toEqual(["warning"]);
+    // all that arrived, whether they match or not
+    expect(res.arrived).toBe(3);
     await write(`${p}-oper`, message("status"), message("another warning", 13));
     expect(texts((await tail.poll()).messages)).toEqual(["another warning"]);
   });
@@ -159,7 +162,8 @@ describe.skipIf(!url)("live mode against OpenSearch", () => {
     const res = await tail.poll();
     expect(res.messages).toHaveLength(2);
     expect(res.dropped).toBe(3);
-    expect(await tail.poll()).toEqual({ messages: [], dropped: 0 });
+    expect(res.arrived).toBe(5);
+    expect(await tail.poll()).toEqual({ messages: [], dropped: 0, arrived: 0 });
   });
 
   describe("over the WebSocket", () => {

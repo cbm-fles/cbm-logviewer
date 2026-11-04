@@ -5,7 +5,7 @@ const status = (page: import("@playwright/test").Page) =>
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  await expect(status(page)).toHaveText(/^42 of 42 messages/, {
+  await expect(status(page)).toHaveText(/^42 of 47 messages match/, {
     timeout: 10000,
   });
 });
@@ -13,12 +13,12 @@ test.beforeEach(async ({ page }) => {
 test("filters by match and exclude, applied with Enter", async ({ page }) => {
   const match = page.getByLabel("Match message");
   await match.fill("warning");
-  await expect(status(page)).toHaveText(/^42 of 42/);
+  await expect(status(page)).toHaveText(/^42 of 47 messages match/);
   await match.press("Enter");
-  await expect(status(page)).toHaveText(/^2 of 2/);
+  await expect(status(page)).toHaveText(/^2 of 47 messages match/);
   await page.getByLabel("Exclude message").fill("first");
   await page.getByLabel("Exclude message").press("Enter");
-  await expect(status(page)).toHaveText(/^1 of 1/);
+  await expect(status(page)).toHaveText(/^1 of 47 messages match/);
   await expect(
     page.getByRole("cell", { name: "second warning" }),
   ).toBeVisible();
@@ -26,17 +26,17 @@ test("filters by match and exclude, applied with Enter", async ({ page }) => {
   // in the URL, and back from it
   expect(new URL(page.url()).search).toBe("?message=warning&-message=first");
   await page.reload();
-  await expect(status(page)).toHaveText(/^1 of 1/);
+  await expect(status(page)).toHaveText(/^1 of 47 messages match/);
   await expect(page.getByLabel("Match message")).toHaveValue("warning");
 
   await page.getByRole("button", { name: "Clear filters" }).click();
-  await expect(status(page)).toHaveText(/^42 of 42/);
+  await expect(status(page)).toHaveText(/^42 of 47 messages match/);
   expect(new URL(page.url()).search).toBe("");
 });
 
 test("opens a link with filters", async ({ page }) => {
   await page.goto("/?severities=13&host=node0*");
-  await expect(status(page)).toHaveText(/^2 of 2/);
+  await expect(status(page)).toHaveText(/^2 of 47 messages match/);
   await expect(
     page.getByRole("button", { name: "INFO", exact: true }),
   ).toHaveAttribute("aria-pressed", "false");
@@ -55,7 +55,7 @@ test("shows a message in the inspector and filters on its fields", async ({
     inspector.getByRole("button", { name: "Match this Severity" }),
   ).toHaveCount(0);
   await inspector.getByRole("button", { name: "Match this Message" }).click();
-  await expect(status(page)).toHaveText(/^1 of 1/);
+  await expect(status(page)).toHaveText(/^1 of 47 messages match/);
   await expect(page.getByLabel("Match message")).toHaveValue("second warning");
   await inspector.getByRole("button", { name: "Close" }).click();
   await expect(inspector).toHaveCount(0);
@@ -72,7 +72,7 @@ test("filters from the menu of a cell", async ({ page }) => {
   await expect(page.getByRole("menu", { name: `Host: ${host}` })).toBeVisible();
   await page.getByRole("menuitem", { name: "Exclude", exact: true }).click();
   await expect(page.getByLabel("Exclude host")).toHaveValue(host);
-  await expect(status(page)).not.toHaveText(/^42 of 42/);
+  await expect(status(page)).not.toHaveText(/^42 of 47 messages match/);
   await expect(page.getByRole("row").filter({ hasText: host })).toHaveCount(0);
 });
 
@@ -130,12 +130,12 @@ test("shows and filters the instance, which not all messages have", async ({
 
   await page.getByLabel("Match instance").fill("1");
   await page.getByLabel("Match instance").press("Enter");
-  await expect(status(page)).toHaveText(/^20 of 20/);
+  await expect(status(page)).toHaveText(/^20 of 47 messages match/);
   await page.getByLabel("Match instance").fill("");
   await page.getByLabel("Exclude instance").fill("1");
   await page.getByLabel("Exclude instance").press("Enter");
   // instance 0 and the warnings without an instance
-  await expect(status(page)).toHaveText(/^22 of 22/);
+  await expect(status(page)).toHaveText(/^22 of 47 messages match/);
   await expect(
     page.getByRole("cell", { name: "second warning" }),
   ).toBeVisible();
@@ -150,7 +150,7 @@ test("shows and filters the instance, which not all messages have", async ({
     page.getByRole("menuitem", { name: "Match", exact: true }),
   ).toBeDisabled();
   await page.getByRole("menuitem", { name: "Clear filter" }).click();
-  await expect(status(page)).toHaveText(/^42 of 42/);
+  await expect(status(page)).toHaveText(/^42 of 47 messages match/);
 });
 
 test("closes the inspector when its message is filtered out", async ({
@@ -161,7 +161,7 @@ test("closes the inspector when its message is filtered out", async ({
   await expect(inspector).toBeVisible();
   await page.getByLabel("Exclude message").fill("first");
   await page.getByLabel("Exclude message").press("Enter");
-  await expect(status(page)).toHaveText(/^41 of 41/);
+  await expect(status(page)).toHaveText(/^41 of 47 messages match/);
   await expect(inspector).toHaveCount(0);
 });
 
@@ -194,7 +194,7 @@ test("lists all filters in a panel, also of hidden columns", async ({
   await expect(panel).toContainText("PID (hidden)");
   await panel.getByLabel("Exclude Message in all filters").fill("status*");
   await panel.getByRole("button", { name: "Apply" }).click();
-  await expect(status(page)).toHaveText(/^2 of 2/);
+  await expect(status(page)).toHaveText(/^2 of 47 messages match/);
   await expect(page.locator(".filter-count")).toHaveText("2 filters active");
   // the same filter under the column header
   await expect(page.getByLabel("Exclude message", { exact: true })).toHaveValue(
@@ -202,8 +202,28 @@ test("lists all filters in a panel, also of hidden columns", async ({
   );
 
   await panel.getByRole("button", { name: "Clear all" }).click();
-  await expect(status(page)).toHaveText(/^42 of 42/);
+  await expect(status(page)).toHaveText(/^42 of 47 messages match/);
   await expect(page.locator(".filter-count")).toHaveCount(0);
   await panel.getByRole("button", { name: "Close filters" }).click();
   await expect(panel).toHaveCount(0);
+});
+
+test("shows the effect and the filters in the status line", async ({
+  page,
+}) => {
+  // with all severities and no filters, only the number
+  await page.getByRole("button", { name: "DEBUG", exact: true }).click();
+  await expect(status(page)).toHaveText("47 messages");
+  await expect(page.locator(".status-filters")).toHaveCount(0);
+
+  await page.getByLabel("Match host").fill("node0*");
+  await page.getByLabel("Exclude message", { exact: true }).fill("status*");
+  await page.getByLabel("Exclude message", { exact: true }).press("Enter");
+  await expect(status(page)).toHaveText("7 of 47 messages match");
+  const filters = page.locator(".status-filters");
+  await expect(filters).toHaveText(
+    "Filters: Host node0* · not Message status*",
+  );
+  await filters.click();
+  await expect(page.getByRole("region", { name: "Filters" })).toBeVisible();
 });

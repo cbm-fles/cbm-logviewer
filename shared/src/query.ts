@@ -56,6 +56,15 @@ export interface QueryResponse {
   took_ms: number;
 }
 
+// the number of messages that pass the filters
+export interface CountRequest {
+  filters: Filters;
+}
+
+export interface CountResponse {
+  count: number;
+}
+
 export interface StatsRequest {
   filters: Filters;
   // the number of histogram buckets

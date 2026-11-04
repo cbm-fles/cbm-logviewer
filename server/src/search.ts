@@ -163,6 +163,15 @@ export class Search {
     return result;
   }
 
+  async count(filters: Filters): Promise<number> {
+    const { body } = await this.client.count({
+      index: this.index,
+      ignore_unavailable: true,
+      body: { query: buildQuery(resolveTimes(filters)) },
+    });
+    return Number(body.count);
+  }
+
   // The most frequent values of a keyword field
   async values(
     field: string,

@@ -13,7 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { LiveConnection, type LiveState, query } from "./api";
+import { LiveConnection, type LiveState, count, query } from "./api";
 import { CellMenu, type CellMenuState } from "./CellMenu";
 import { shown } from "./columns";
 import { fileName, save, toCsv, toJson } from "./download";
@@ -35,14 +35,16 @@ import { Inspector } from "./Inspector";
 import { LogTable, cellText } from "./LogTable";
 import { mergeNewest } from "./merge";
 import { useSettings } from "./settings";
+import { describeFilters, liveText, queryText } from "./status";
 import { Toolbar } from "./Toolbar";
 
 // the number of messages of a query, and kept in live mode
 const limit = maxQueryLimit;
 
 interface QueryStatus {
+  // the messages that match, and all in the time range
   total: number;
-  tookMs: number;
+  all: number | undefined;
 }
 
 export function App() {
@@ -79,6 +81,10 @@ export function App() {
   const [liveLoading, setLiveLoading] = useState(false);
   // counts the loads, to show the newest messages after each
   const [liveLoads, setLiveLoads] = useState(0);
+  // all messages since the oldest one shown, whether they match or not, for
+  // the effect of the filters
+  const [liveAll, setLiveAll] = useState<number>();
+  const [liveSince, setLiveSince] = useState<string>();
 
   const runQuery = useCallback(async (v: View) => {
     abort.current?.abort();
@@ -87,12 +93,18 @@ export function App() {
     setLoading(true);
     setError(undefined);
     try {
-      const res = await query(
-        { filters: queryFilters(v), limit },
-        controller.signal,
-      );
+      const filters = queryFilters(v);
+      // all messages of the time range, for the effect of the filters
+      const range = {
+        ...(filters.from !== undefined && { from: filters.from }),
+        ...(filters.to !== undefined && { to: filters.to }),
+      };
+      const [res, all] = await Promise.all([
+        query({ filters, limit }, controller.signal),
+        count(range, controller.signal).catch(() => undefined),
+      ]);
       setMessages(res.messages);
-      setQueryStatus({ total: res.total, tookMs: res.took_ms });
+      setQueryStatus({ total: res.total, all });
     } catch (err) {
       if (!controller.signal.aborted) setError((err as Error).message);
     } finally {
@@ -175,9 +187,18 @@ export function App() {
         controller.signal,
       );
       if (controller.signal.aborted) return;
-      setMessages(mergeNewest(res.messages, sinceStart.current, limit));
+      const merged = mergeNewest(res.messages, sinceStart.current, limit);
+      setMessages(merged);
       setPending([]);
       setLiveLoads((n) => n + 1);
+      const since = merged[0]?.["@timestamp"] ?? new Date().toISOString();
+      setLiveSince(since);
+      setLiveAll(undefined);
+      count({ from: since }, controller.signal)
+        .then((all) => {
+          if (!controller.signal.aborted) setLiveAll(all);
+        })
+        .catch(() => undefined);
     } catch (err) {
       if (controller.signal.aborted) return;
       setError((err as Error).message);
@@ -198,6 +219,9 @@ export function App() {
       }
       if (event.type !== "messages" || livePhase.current === "waiting") return;
       if (event.dropped > 0) setDropped((d) => d + event.dropped);
+      if (livePhase.current === "live" && event.arrived > 0) {
+        setLiveAll((a) => (a === undefined ? a : a + event.arrived));
+      }
       if (livePhase.current === "loading") {
         sinceStart.current = mergeNewest(
           sinceStart.current,
@@ -239,6 +263,8 @@ export function App() {
     setPaused(false);
     setError(undefined);
     setQueryStatus(undefined);
+    setLiveAll(undefined);
+    setLiveSince(undefined);
     const v = { ...view, mode: m };
     setView(v);
     apply(v);
@@ -332,6 +358,8 @@ export function App() {
           setMessages([]);
           setPending([]);
           setDropped(0);
+          setLiveSince(new Date().toISOString());
+          setLiveAll(0);
         }}
         onDownload={download}
         utc={settings.utc}
@@ -394,10 +422,15 @@ export function App() {
         loading={loading}
         liveState={liveState}
         liveLoading={liveLoading}
+        liveAll={liveAll}
+        liveSince={liveSince}
         paused={paused}
         pending={pending.length}
         dropped={dropped}
         error={error}
+        filters={describeFilters(applied)}
+        onFilters={() => setFiltersOpen(true)}
+        utc={settings.utc}
       />
     </div>
   );
@@ -410,10 +443,15 @@ function StatusBar(p: {
   loading: boolean;
   liveState: LiveState;
   liveLoading: boolean;
+  liveAll: number | undefined;
+  liveSince: string | undefined;
   paused: boolean;
   pending: number;
   dropped: number;
   error: string | undefined;
+  filters: string[];
+  onFilters: () => void;
+  utc: boolean;
 }) {
   const counts = useMemo(() => {
     const c = new Map<string, number>();
@@ -428,7 +466,11 @@ function StatusBar(p: {
     state = p.loading
       ? "Querying…"
       : p.queryStatus
-        ? `${n(p.messages.length)} of ${n(p.queryStatus.total)} messages${p.queryStatus.total > p.messages.length ? ` (the newest ${n(limit)})` : ""}, in ${(p.queryStatus.tookMs / 1000).toFixed(1)} s`
+        ? queryText({
+            shown: p.messages.length,
+            matching: p.queryStatus.total,
+            all: p.queryStatus.all,
+          })
         : "";
   } else {
     const connection =
@@ -439,8 +481,15 @@ function StatusBar(p: {
           : "Disconnected, reconnecting…";
     state = [
       connection,
-      p.liveLoading && p.liveState === "live" ? "loading…" : null,
-      `${n(p.messages.length)} messages`,
+      p.liveLoading && p.liveState === "live"
+        ? "loading…"
+        : liveText({
+            shown: p.messages.length,
+            all: p.liveAll,
+            since: p.liveSince,
+            limit,
+            utc: p.utc,
+          }),
       p.paused && `paused, ${n(p.pending)} new`,
       p.dropped > 0 && `${n(p.dropped)} dropped`,
     ]
@@ -453,6 +502,16 @@ function StatusBar(p: {
       <span className={`state live-${p.mode === "live" ? p.liveState : "off"}`}>
         {state}
       </span>
+      {p.filters.length > 0 && (
+        <button
+          type="button"
+          className="status-filters"
+          title={`${p.filters.join("\n")}\n\nClick to edit the filters`}
+          onClick={p.onFilters}
+        >
+          Filters: {p.filters.join(" · ")}
+        </button>
+      )}
       {p.error && <span className="error">{p.error}</span>}
       <span className="counts">
         {severities.map((s) =>

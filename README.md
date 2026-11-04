@@ -39,6 +39,9 @@ and Data, a pattern is a phrase, and wildcards apply to single words.
 
 The toolbar shows how many filters of columns are active; Edit lists them all
 beside the table, also those of hidden columns, with the syntax of patterns.
+The status line shows how many messages match of all messages in the time
+range, in live mode of all since the oldest one shown, which filters of
+columns apply, and the number of messages shown per severity.
 
 A click on a message shows all its fields beside the table; there, + and −
 add a filter on a value. The arrow keys, Page Up/Down, Home and End move

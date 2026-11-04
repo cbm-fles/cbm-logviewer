@@ -225,6 +225,16 @@ describe.skipIf(!url)("Search against OpenSearch", () => {
     ]);
   });
 
+  it("counts the messages that pass the filters", async () => {
+    expect(await search.count({})).toBe(30);
+    expect(
+      await search.count({
+        from: "2026-11-04T15:00:00Z",
+        severities: [13],
+      }),
+    ).toBe(5);
+  });
+
   it("lists the values of a field", async () => {
     const res = await search.values("service", {});
     expect(res.values).toEqual([

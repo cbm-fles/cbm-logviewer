@@ -46,6 +46,13 @@ export const queryBodySchema = {
   },
 } as const;
 
+export const countBodySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["filters"],
+  properties: { filters: filtersSchema },
+} as const;
+
 export const statsBodySchema = {
   type: "object",
   additionalProperties: false,

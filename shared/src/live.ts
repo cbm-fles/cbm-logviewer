@@ -14,6 +14,12 @@ export type LiveEvent =
   | { type: "started" }
   // new messages, in the order of their timestamps; `dropped` is the number of
   // matching messages left out since the last event, as there were too many
-  // or the browser did not keep up
-  | { type: "messages"; messages: LogMessage[]; dropped: number }
+  // or the browser did not keep up; `arrived` is the number of all messages
+  // that arrived since the last event, whether they match or not
+  | {
+      type: "messages";
+      messages: LogMessage[];
+      dropped: number;
+      arrived: number;
+    }
   | { type: "error"; error: string };
