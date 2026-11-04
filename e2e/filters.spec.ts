@@ -100,7 +100,9 @@ test("downloads the messages", async ({ page }) => {
   expect(csv.suggestedFilename()).toMatch(/^logs-.*\.csv$/);
   const text = await (await csv.createReadStream()).toArray();
   const lines = Buffer.concat(text).toString().trim().split("\r\n");
-  expect(lines[0]).toBe("Time,Severity,Host,Service,Timeslice,Message");
+  expect(lines[0]).toBe(
+    "Time,Severity,Host,Service,Instance,Timeslice,Message",
+  );
   expect(lines).toHaveLength(43);
 
   await page.getByRole("button", { name: "Download" }).click();
@@ -117,4 +119,36 @@ test("downloads the messages", async ({ page }) => {
       .split("\n")
       .map((l) => JSON.parse(l).message),
   ).toContain("first warning");
+});
+
+test("shows and filters the instance, which not all messages have", async ({
+  page,
+}) => {
+  const row = (text: string) => page.getByRole("row").filter({ hasText: text });
+  await expect(row("status 7").getByRole("cell").nth(4)).toHaveText("1");
+  await expect(row("second warning").getByRole("cell").nth(4)).toHaveText("");
+
+  await page.getByLabel("Match instance").fill("1");
+  await page.getByLabel("Match instance").press("Enter");
+  await expect(status(page)).toHaveText(/^20 of 20/);
+  await page.getByLabel("Match instance").fill("");
+  await page.getByLabel("Exclude instance").fill("1");
+  await page.getByLabel("Exclude instance").press("Enter");
+  // instance 0 and the warnings without an instance
+  await expect(status(page)).toHaveText(/^22 of 22/);
+  await expect(
+    page.getByRole("cell", { name: "second warning" }),
+  ).toBeVisible();
+
+  // an empty cell offers no filter
+  await row("second warning")
+    .getByRole("cell")
+    .nth(4)
+    .click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Copy value" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Match this value" }),
+  ).toHaveCount(0);
 });

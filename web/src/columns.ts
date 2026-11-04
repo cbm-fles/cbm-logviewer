@@ -21,6 +21,7 @@ export const defaultWidths: Record<string, number> = {
   severity_text: 64,
   host: 80,
   service: 90,
+  instance: 70,
   thread: 100,
   tid: 70,
   pid: 70,

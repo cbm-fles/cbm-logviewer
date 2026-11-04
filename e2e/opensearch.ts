@@ -9,11 +9,17 @@ export const client = new Client({
   node: process.env.OPENSEARCH_TEST_URL ?? "http://localhost:9201",
 });
 
-export function message(text: string, severity: [number, string], ago: number) {
+export function message(
+  text: string,
+  severity: [number, string],
+  ago: number,
+  instance?: string,
+) {
   return {
     "@timestamp": new Date(Date.now() - ago).toISOString(),
     host: `node0${text.length % 3}`,
     service: "tsclient",
+    ...(instance !== undefined && { instance }),
     severity_code: severity[0],
     severity_text: severity[1],
     message: text,

@@ -16,6 +16,8 @@ export const fields: readonly Field[] = [
   { name: "severity_text", type: "keyword", label: "Severity", visible: true },
   { name: "host", type: "keyword", label: "Host", visible: true },
   { name: "service", type: "keyword", label: "Service", visible: true },
+  // which of several processes of a program on a host, if there are
+  { name: "instance", type: "keyword", label: "Instance", visible: true },
   { name: "thread", type: "keyword", label: "Thread", visible: false },
   { name: "tid", type: "integer", label: "TID", visible: false },
   { name: "pid", type: "integer", label: "PID", visible: false },
@@ -44,6 +46,7 @@ export interface LogMessage {
   severity_text: string;
   host?: string;
   service?: string;
+  instance?: string;
   thread?: string;
   tid?: number;
   pid?: number;

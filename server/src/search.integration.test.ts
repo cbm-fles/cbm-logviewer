@@ -31,6 +31,7 @@ function messages() {
         index: `${prefix}-oper`,
         doc: {
           ...base,
+          instance: String(i % 2),
           severity_code: 9,
           severity_text: "INFO",
           message: `Status ${i}`,
@@ -202,6 +203,26 @@ describe.skipIf(!url)("Search against OpenSearch", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ total: 10 });
     expect(res.json().messages).toHaveLength(3);
+  });
+
+  it("filters by instance, which not all messages have", async () => {
+    const match = await search.query({
+      filters: { fields: { instance: { match: ["1"] } } },
+      limit: 100,
+    });
+    expect(match.total).toBe(5);
+    expect(match.messages.every((m) => m.instance === "1")).toBe(true);
+    const exclude = await search.query({
+      filters: { fields: { instance: { exclude: ["1"] } } },
+      limit: 100,
+    });
+    // the 5 status messages of instance 0 and the 20 without an instance
+    expect(exclude.total).toBe(25);
+    const values = await search.values("instance", {});
+    expect(values.values).toEqual([
+      { value: "0", count: 5 },
+      { value: "1", count: 5 },
+    ]);
   });
 
   it("lists the values of a field", async () => {

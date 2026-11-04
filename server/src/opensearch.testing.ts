@@ -23,6 +23,7 @@ export const mappings = {
     timeslice: { type: "long" },
     host: { type: "keyword" },
     service: { type: "keyword" },
+    instance: { type: "keyword" },
     thread: { type: "keyword" },
     tid: { type: "long" },
     pid: { type: "long" },

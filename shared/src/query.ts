@@ -6,6 +6,7 @@ import type { LogMessage } from "./fields.js";
 export const filterFields = [
   "host",
   "service",
+  "instance",
   "thread",
   "tid",
   "pid",

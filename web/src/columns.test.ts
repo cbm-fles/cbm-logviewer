@@ -8,6 +8,7 @@ describe("columns", () => {
       "severity_text",
       "host",
       "service",
+      "instance",
       "timeslice",
       "message",
     ]);
